@@ -1,0 +1,584 @@
+---
+title: "Untitled"
+author: "Al Kovaleski"
+date: "4/22/2020"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(car)
+library(ggplot2)
+library(lsmeans)
+library(RVAideMemoire)
+library(deming)
+library(rgr)
+library(tls)
+library(cowplot)
+library(drc)
+library(agricolae)
+library(sandwich)
+
+
+dat=read.csv("MapleStemDamage200324.csv")
+
+cl.dat=read.csv("SpeciesGenos.csv")
+
+dat$posT=-dat$Temperature+10
+
+mod1=drm(dat$Damage~dat$posT, dat$Genotype,fct=LL.2(), type="continuous"   )
+
+summary(mod1)
+
+dat2=data.frame(ED(mod1,50, interval="delta", type="relative", level=0.95)[,1])-10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("fifty","Genotype")
+dat2$Genotype=as.factor(gsub(':50','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat2,cl.dat)
+
+
+dat2=data.frame(ED(mod1,20, interval="delta", type="relative", level=0.95)[,1])-10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("twenty","Genotype")
+dat2$Genotype=as.factor(gsub(':20','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+dat2=data.frame(ED(mod1,80, interval="delta", type="relative", level=0.95)[,1])-10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("eighty","Genotype")
+dat2$Genotype=as.factor(gsub(':80','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+
+
+
+lm1<-lm(twenty~Species,data=dat3);Anova(lm1)
+HSD.test(lm1,"Species",console=T,alpha=0.05)
+
+lm1<-lm(fifty~Species,data=dat3);Anova(lm1)
+HSD.test(lm1,"Species",console=T,alpha=0.05)
+
+lm1<-lm(eighty~Species,data=dat3);Anova(lm1)
+HSD.test(lm1,"Species",console=T,alpha=0.05)
+
+
+mod2=drm(dat$Damage~dat$posT, dat$Species,fct=LL.2(), type="continuous"   )
+EDcomp(mod2,c(50,50),type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+ED(mod2,50, interval="delta", type="relative", level=0.95)-10
+
+
+
+dat4=data.frame(aggregate(Damage~Genotype+Species+Temperature, dat, min))
+dat4=dat4[dat4$Damage<0.75,]
+dat5=data.frame(aggregate(Temperature~Genotype+Species, dat4, min))
+
+
+lm1<-lm(Temperature~Species,data=dat5);Anova(lm1)
+HSD.test(lm1,"Species",console=T,alpha=0.05)
+
+```
+
+
+
+```{r}
+dat6=read.csv("ResultsbyAccession-L_boiling.csv")
+dat6=dat6[,c(3,4,7,8,9)]
+colnames(dat6)=c("Genotype","Species","_20_EL_L","_50_EL_L","_80_EL_L")
+
+dat7=read.csv("ResultsbyAccession-Rt_Nitrogen.csv")
+dat7=dat7[,c(3,4,9,10,11,12)]
+colnames(dat7)=c("Genotype","Species","_20_EL_RtN","_50_EL_RtN","_80_EL_RtN","_50_EL_absN")
+
+dat8=read.csv("ResultsbyAccession-Rt_boiling.csv")
+dat8=dat8[,c(3,4,9,10,11)]
+colnames(dat8)=c("Genotype","Species","_20_EL_Rtboil","_50_EL_Rtboil","_80_EL_Rtboil")
+
+dat3a=dat3[,c(1,3,2,4,5)]
+colnames(dat3a)=c("Genotype","Species","_50_Dam","_20_Dam","_80_Dam")
+dat3a[,3]=-dat3a[,3]
+dat3a[,4]=-dat3a[,4]
+dat3a[,5]=-dat3a[,5]
+
+
+dat6g=read.csv("ResultsbyAccession-L_Nitrogen-Gompertz.csv")
+dat6g=dat6g[,c(3,4,7,8,9,10)]
+colnames(dat6g)=c("Genotype","Species","Gomp_EL_20","Gomp_EL_50","Gomp_EL_80","Gomp_Tmax")
+
+
+dat5a=dat5
+colnames(dat5a)=c("Genotype","Species","Min_Dam")
+
+dat9=merge(dat6,dat7)
+dat9=merge(dat9,dat8)
+dat9=merge(dat9,dat3a, all=T)
+dat9=merge(dat9,dat5a)
+dat9=merge(dat9,dat6g)
+
+
+
+res=cor(dat9[c(3:12,17,18,19,20)],dat9[c(14,13,15,16)])
+
+
+
+library(corrplot)
+corrplot(res, method="pie",cl.lim=c(0,1), is.corr=FALSE,
+         tl.col = "black", tl.srt = 45)
+
+
+res=cor(dat9[c(3:5,20)],dat9[c(17:20)])
+
+
+
+library(corrplot)
+corrplot(res, method="pie",cl.lim=c(0,1), is.corr=FALSE,
+         tl.col = "black", tl.srt = 45)
+
+
+dat10=aggregate(.~Species,dat9,mean)
+
+
+res=cor(dat10[c(3:12,17,18,19,20)],dat10[c(14,13,15,16)])
+
+
+library(corrplot)
+corrplot(res, method="pie",cl.lim=c(0,1), is.corr=FALSE,
+         tl.col = "black", tl.srt = 45)
+
+
+# dat10=data.frame(dat10[c(1,2,4)],stack(dat10[c(14,13,15,16)]))
+# 
+# 
+# ggplot(data=dat10)+
+#   geom_point(aes(x=X_50_EL_L,y=values, col=Species))+
+#   geom_line(aes(x=X_50_EL_L,y=X_50_EL_L))+
+#   geom_smooth(aes(x=X_50_EL_L,y=values), method="glm")+
+#   scale_y_continuous(limits=c(-45,-5), expand=c(0,0))+
+#   scale_x_continuous(limits=c(-45,-5), expand=c(0,0))+
+#   theme_bw()+
+#   facet_wrap(~dat10$ind)
+
+
+
+
+```
+
+```{r}
+
+dat11=NULL
+
+for (i in levels(factor(dat$Genotype))) {
+  
+  subdat=subset(dat, Genotype %in% i)
+  mod2=drm(subdat$Damage~subdat$posT, fct=LL.2(),  type="continuous" )
+  
+  print(summary(mod2))
+  
+  b=mod2$coefficients[1]
+  e=mod2$coefficients[2]
+
+  
+  dat11=rbind(dat11,c(i,levels(factor(subdat$Species)),b,e))
+  
+  
+}
+
+dat11=data.frame(dat11)
+colnames(dat11)=c("Accession","Species","bDam","eDam")
+dat11$bDam=as.numeric(as.character(dat11$bDam))
+dat11$eDam=as.numeric(as.character(dat11$eDam))
+
+
+dat6=read.csv("ResultsbyAccession-L_boiling.csv")
+dat12=dat6[c(3,4,5,6)]
+colnames(dat12)=c("Accession","Species","bL","eL")
+
+
+dat13=merge(dat11,dat12)
+
+
+x=seq(0,95,1)
+  
+pred=data.frame(x)
+pred2=pred
+  
+for (j in levels(factor(dat13$Accession))) {
+    
+  y=(100)/(1+exp(dat13$bL[dat13$Accession==j]*(log(x)-log(dat13$eL[dat13$Accession==j]))))
+  y2=(100)/(1+exp(dat13$bDam[dat13$Accession==j]*(log(x)-log(dat13$eDam[dat13$Accession==j]))))
+  
+  pred=cbind(pred,y)
+  pred2=cbind(pred2,y2)
+    
+}
+
+colnames(pred)=c("x",levels(factor(dat13$Accession)))
+pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+colnames(pred)=c("x","y","Accession")
+
+colnames(pred2)=c("x",levels(factor(dat13$Accession)))
+pred2=data.frame(pred2[1],stack(pred2[2:ncol(pred2)]))
+colnames(pred2)=c("x","y2","Accession")
+
+pred3=merge(pred,pred2)
+
+
+pred5=NULL
+
+for (j in levels(pred3$Accession)) {
+  
+  pred4=subset(pred3, Accession %in% j)
+  
+  for (i in seq(1,99,1) ) {
+    
+    newx=pred4$x[abs(pred4$y-i)==min(abs(pred4$y-i)) ]
+    newx2=pred4$x[abs(pred4$y2-i)==min(abs(pred4$y2-i)) ]
+    
+    pred5=rbind(pred5, c(j,i,newx,newx2))
+    
+  }
+  
+}
+
+pred5=data.frame(pred5)
+
+colnames(pred5)=c("Accession","Temperature","ELy","Damy")
+pred5[,2]=as.numeric(as.character(pred5[,2]))
+pred5[,3]=as.numeric(as.character(pred5[,3]))
+pred5[,4]=as.numeric(as.character(pred5[,4]))
+
+pred5$EL50=0
+
+for (j in levels(pred5$Accession)) {
+  
+  pred5$EL50[pred5$Accession==j]=dat12$eL[dat12$Accession==j]
+  
+}
+
+
+pred5$dif=(pred5$ELy-pred5$Damy)
+
+ggplot()+
+  geom_col(aes(x=pred5$Temperature,y=abs(pred5$dif), group=pred5$Accession),stat="identity",position = "identity", alpha=0.1)+
+  geom_smooth(aes(x=pred5$Temperature, y=abs(pred5$dif)))+
+  theme_bw()
+
+ggplot()+
+  geom_point(aes(x=pred5$Temperature, y=pred5$dif), alpha=0.1)+
+  geom_smooth(aes(x=pred5$Temperature, y=pred5$dif))
+
+  
+ggplot()+
+  geom_point(aes(x=pred5$Temperature, y=-pred5$EL50+pred5$Damy), alpha=0.2)+
+  geom_smooth(aes(x=pred5$Temperature, y=-pred5$EL50+pred5$Damy))+
+  theme_bw()
+
+ggplot()+
+  geom_col(aes(x=pred5$Temperature,y=(-pred5$EL50+pred5$Damy), group=pred5$Accession),position = "identity", alpha=0.1)+
+  geom_smooth(aes(x=pred5$Temperature, y=(-pred5$EL50+pred5$Damy)))+
+  theme_bw()
+
+
+
+
+ggplot()+
+  geom_line(aes(x=-x+10,y=y),data=pred3)+
+  geom_line(aes(x=-x+10,y=y2), lty=2,data=pred3)+
+  #geom_point(aes(y=Temperature,x=dif),size=0.01, data=pred5)+
+  theme_bw()+
+  facet_wrap(~Accession)
+
+
+p=ggplot()+
+  geom_point(aes(y=Temperature,x=dif),data=pred5)+
+  theme_bw()+
+  facet_wrap(~Accession)
+
+p
+
+#### Can be used to color background per Species ####
+library(grid)
+
+g <- ggplot_gtable(ggplot_build(p))
+strip_t <- which(grepl('strip-t', g$layout$name))
+fills <- c("dark green","purple3","navyblue","green4","magenta1","chartreuse",
+           "yellow","firebrick1","firebrick4","deeppink","cyan","blue","dark green",
+           "purple3","navyblue","green4","magenta1","chartreuse",
+           "yellow","firebrick1","firebrick4","deeppink","cyan","blue","dark green",
+           "purple3","navyblue","green4","magenta1","chartreuse",
+           "yellow","firebrick1","firebrick4","deeppink","cyan","blue")
+k <- 1
+for (i in strip_t) {
+  j <- which(grepl('rect', g$grobs[[i]]$grobs[[1]]$childrenOrder))
+  g$grobs[[i]]$grobs[[1]]$children[[j]]$gp$fill <- fills[k]
+  k <- k+1
+}
+grid.draw(g)
+
+
+```
+
+
+
+```{r}
+dat6=read.csv("ResultsbyAccession-L_boiling.csv")
+dat6=dat6[,c(3,4,7,8,9)]
+colnames(dat6)=c("Genotype","Species","_20_EL_L","_50_EL_L","_80_EL_L")
+
+dat2=data.frame(-ED(mod1,10, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("ten","Genotype")
+dat2$Genotype=as.factor(gsub(':10','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat2,cl.dat)
+
+
+dat2=data.frame(-ED(mod1,20, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("twenty","Genotype")
+dat2$Genotype=as.factor(gsub(':20','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+dat2=data.frame(-ED(mod1,30, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("thirty","Genotype")
+dat2$Genotype=as.factor(gsub(':30','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+
+dat2=data.frame(-ED(mod1,40, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("forty","Genotype")
+dat2$Genotype=as.factor(gsub(':40','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,50, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("fifty","Genotype")
+dat2$Genotype=as.factor(gsub(':50','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,60, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("sixty","Genotype")
+dat2$Genotype=as.factor(gsub(':60','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,70, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("seventy","Genotype")
+dat2$Genotype=as.factor(gsub(':70','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,80, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("eighty","Genotype")
+dat2$Genotype=as.factor(gsub(':80','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,90, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("ninety","Genotype")
+dat2$Genotype=as.factor(gsub(':90','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+
+
+
+dat9b=merge(dat6,dat3)
+
+
+
+res=cor(dat9b[3:5],dat9b[6:14])
+
+
+
+library(corrplot)
+corrplot(res, method="pie",cl.lim=c(-1,1), is.corr=T,
+         tl.col = "black", tl.srt = 45)
+
+
+
+dat10=aggregate(.~Species,dat9b,mean)
+dat10b=aggregate(.~Species,dat9b,sd)
+
+
+dat10=data.frame(dat10[c(1,4)],stack(dat10[6:14]))
+dat10b=data.frame(dat10b[c(1,4)],stack(dat10b[6:14]))
+
+colnames(dat10)=c("Species","EL_Relative50","CH_Damage","Percent")
+colnames(dat10b)=c("Species","EL_error","CH_error","Percent")
+
+dat10=merge(dat10,dat10b)
+dat10$CHoutofrange=NA
+dat10$CHoutofrange[dat10$CH_Damage<(-40)]=-39.5
+
+
+dat10b=data.frame(levels(dat10$Species))
+colnames(dat10b)="Species"
+dat10b$x=-40
+dat10b$y=-40
+
+dat10c=data.frame(levels(dat10$Species))
+colnames(dat10c)="Species"
+dat10c$x=-5
+dat10c$y=-5
+
+dat10b=rbind(dat10b,dat10c)
+
+dat10=merge(dat10,dat10b)
+
+
+ggplot(data=dat10)+
+  geom_smooth(aes(x=EL_Relative50,y=CH_Damage), formula=y~x+0,col="black",size=0.5, method="glm")+
+  geom_line(aes(x=x,y=y), lty=2)+
+  geom_errorbar(aes(ymin=CH_Damage-CH_error, ymax=CH_Damage, x=EL_Relative50),width=0, col="gray40", size=0.5)+
+  geom_errorbar(aes(ymin=CH_Damage, ymax=CH_Damage+CH_error, x=EL_Relative50),width=0, col="gray40",size=0.5)+
+  geom_errorbarh(aes(xmin=EL_Relative50-EL_error, xmax=EL_Relative50+EL_error, y=CH_Damage),height=0, col="gray40",size=0.5)+
+  geom_point(aes(x=EL_Relative50,y=CH_Damage, col=Species))+
+  geom_point(aes(x=EL_Relative50,y=CHoutofrange, col=Species), stroke=1, shape=25)+
+  scale_color_manual(values=c("dark green","purple3","navyblue","green4","magenta1","chartreuse","yellow","firebrick1","firebrick4","deeppink","cyan","blue"))+
+  scale_y_continuous(limits=c(-40,-5), expand=c(0.01,0.01))+
+  scale_x_continuous(limits=c(-40,-5), expand=c(0.01,0.01))+
+  theme_bw()+
+  facet_wrap(~dat10$Percent)+
+  theme(text=element_text(face="bold", color="black"),
+        axis.text = element_text(face="bold", color="black"),
+        legend.direction = 'vertical', 
+        legend.position = c(2,2),
+        legend.key.size = unit(1.5, 'lines'),
+        legend.text.align= 1,
+        legend.title = element_blank(),
+        legend.box='horizontal',
+        panel.grid.minor =element_blank(),
+        panel.grid.major = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+rmse=sum((dat9b[,4]-dat9b[,6])^2)/nrow(dat9b)
+bias=sum((dat9b[,4]-dat9b[,6]))/nrow(dat9b)
+r=    cor(dat9b[,4],dat9b[,6])
+r2=    cor(dat9b[,4],dat9b[,6], method="spearman")
+
+rmse
+bias
+r
+r2
+
+rmse=sum((dat9b[,4]-dat9b[,7])^2)/nrow(dat9b)
+bias=sum((dat9b[,4]-dat9b[,7]))/nrow(dat9b)
+r=    cor(dat9b[,4],dat9b[,7])
+r2=    cor(dat9b[,4],dat9b[,7], method="spearman")
+
+rmse
+bias
+r
+r2
+
+
+rmse=sum((dat9b[,4]-dat9b[,8])^2)/nrow(dat9b)
+bias=sum((dat9b[,4]-dat9b[,8]))/nrow(dat9b)
+r=    cor(dat9b[,4],dat9b[,8])
+r2=    cor(dat9b[,4],dat9b[,8], method="spearman")
+
+rmse
+bias
+r
+r2
+
+
+rmse=sum((dat9b[,4]-dat9b[,9])^2)/nrow(dat9b)
+bias=sum((dat9b[,4]-dat9b[,9]))/nrow(dat9b)
+r=    cor(dat9b[,4],dat9b[,9])
+r2=    cor(dat9b[,4],dat9b[,9], method="spearman")
+
+rmse
+bias
+r
+r2
+
+
+rmse=sum((dat9b[,4]-dat9b[,10])^2)/nrow(dat9b)
+bias=sum((dat9b[,4]-dat9b[,10]))/nrow(dat9b)
+r=    cor(dat9b[,4],dat9b[,10])
+r2=    cor(dat9b[,4],dat9b[,10], method="spearman")
+
+rmse
+bias
+r
+r2
+
+
+rmse=sum((dat9b[,4]-dat9b[,11])^2)/nrow(dat9b)
+bias=sum((dat9b[,4]-dat9b[,11]))/nrow(dat9b)
+r=    cor(dat9b[,4],dat9b[,11])
+r2=    cor(dat9b[,4],dat9b[,11], method="spearman")
+
+rmse
+bias
+r
+r2
+
+
+rmse=sum((dat9b[,4]-dat9b[,12])^2)/nrow(dat9b)
+bias=sum((dat9b[,4]-dat9b[,12]))/nrow(dat9b)
+r=    cor(dat9b[,4],dat9b[,12])
+r2=    cor(dat9b[,4],dat9b[,12], method="spearman")
+
+rmse
+bias
+r
+r2
+
+
+rmse=sum((dat9b[,4]-dat9b[,13])^2)/nrow(dat9b)
+bias=sum((dat9b[,4]-dat9b[,13]))/nrow(dat9b)
+r=    cor(dat9b[,4],dat9b[,13])
+r2=    cor(dat9b[,4],dat9b[,13], method="spearman")
+
+rmse
+bias
+r
+r2
+
+
+rmse=sum((dat9b[,4]-dat9b[,14])^2)/nrow(dat9b)
+bias=sum((dat9b[,4]-dat9b[,14]))/nrow(dat9b)
+r=    cor(dat9b[,4],dat9b[,14])
+r2=    cor(dat9b[,4],dat9b[,14], method="spearman")
+
+rmse
+bias
+r
+r2
+
+dat10=aggregate(.~Species,dat9b,mean)
+
+lm1=lm(dat10$forty~0+dat10$`_50_EL_L`)
+summary(lm1)
+
+```
+
+
+
+

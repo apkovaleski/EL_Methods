@@ -1,0 +1,2909 @@
+---
+title: "Untitled"
+author: "Al Kovaleski"
+date: "4/22/2020"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(car)
+library(ggplot2)
+library(lsmeans)
+library(RVAideMemoire)
+library(deming)
+library(rgr)
+library(tls)
+library(cowplot)
+
+
+dat=read.csv("ELMethod.csv")
+dat=read.csv("ELMethodOut3.csv")
+tdat=read.csv("ELTemp.csv")
+tdat=aggregate(ActualT~Collection+Temperature,tdat,mean)
+colnames(tdat)=c("Date","Temperature","RealT")
+dat=merge(dat,tdat, by=c("Date","Temperature"))
+
+
+dat1=dat[,c(1,6,8,9,10)]
+dat1=dat1[complete.cases(dat1),]
+
+summary(dat1)
+
+
+
+deming(formula=Cond_N~Cond_boiling,data=dat1,conf=.95)
+lm1=least.rect(formula=Cond_N~Cond_boiling,data=dat1, conf.level = 0.99, theo=0.5758037)
+
+summary(lm1)
+
+deming(formula=Cond_N~Cond_boiling+0,data=dat1,conf=.95)
+
+tls(formula=Cond_N~Cond_boiling+0,method="normal",data=dat1,conf=.95)
+
+
+dat1$predN=deming(formula=Cond_N~Cond_boiling+0,data=dat1,conf=.95)$coef[2]*dat1$Cond_boiling
+dat1$predboil=(1/deming(formula=Cond_N~Cond_boiling+0,data=dat1,conf=.95)$coef[2])*dat1$Cond_N
+
+
+
+dat1$eN=dat1$Cond_N-dat1$predN
+dat1$eB=dat1$Cond_boiling-dat1$predboil
+
+dat1$realN=dat1$Cond_N-dat1$eN/2
+dat1$realB=dat1$Cond_boiling-dat1$eB/2
+
+
+dat1$etot=sign(dat1$eN)*sqrt((dat1$eN/2)^2 +(dat1$eB/2)^2 )
+
+plot(dat1$Cond_N,dat1$etot)
+abline(0,0)
+
+summary(lm(dat1$etot~dat1$Cond_N))
+
+ssres3=sum(dat1$etot)
+
+
+MSE=sum(dat1$etot^2)/length(dat1$etot)
+
+dat1$stdres=dat1$etot/sqrt(MSE)
+
+plot(dat1$realB,dat1$stdres)
+abline(0,0)
+abline(3,0, lty=3)
+abline(-3,0, lty=3)
+
+hist(dat1$stdres,breaks=20)
+
+
+
+dat2=subset(dat1, abs(stdres) < 3)
+
+
+deming(formula=Cond_N~Cond_boiling+0,data=dat2,conf=.95)
+
+tls(formula=Cond_N~Cond_boiling+0,method="normal",data=dat2,conf=.95)
+
+
+dat2$predN=deming(formula=Cond_N~Cond_boiling+0,data=dat2,conf=.95)$coef[2]*dat2$Cond_boiling
+dat2$predboil=(1/deming(formula=Cond_N~Cond_boiling+0,data=dat2,conf=.95)$coef[2])*dat2$Cond_N
+
+
+
+dat2$eN=dat2$Cond_N-dat2$predN
+dat2$eB=dat2$Cond_boiling-dat2$predboil
+
+dat2$realN=dat2$Cond_N-dat2$eN/2
+dat2$realB=dat2$Cond_boiling-dat2$eB/2
+
+
+
+d=ggplot()+
+  geom_abline(intercept=0,slope=deming(formula=Cond_N~Cond_boiling+0,data=dat2,conf=.95)$coef[2], col="black")+
+  geom_segment(aes(x=dat2$Cond_boiling,y=dat2$Cond_N,xend=dat2$realB,yend=dat2$realN),size=0.1, lty=1)+
+  geom_point(aes(x=dat1$Cond_boiling,y=dat1$Cond_N, col=dat1$Species), size=2)+
+  geom_point(aes(x=dat1$Cond_boiling[abs(dat1$stdres)>3],y=dat1$Cond_N[abs(dat1$stdres)>3]), col="black", shape=1, size=6)+
+  scale_color_manual(values=c("dark green","purple3","navyblue","green4","magenta1","chartreuse","yellow","firebrick1","firebrick4","deeppink","cyan","blue"))+
+  scale_x_continuous(breaks=c(50,100,150,200,250,300), limits=c(0,275), expand=c(0,0))+
+  scale_y_continuous(breaks=c(50,100,150,200,250), limits=c(0,260), expand=c(0,0))+
+  labs(title="Liquid N Conductivity vs. Boiling Conductivity", color="Species",
+       x=expression(paste("Boiling Conductivity (",mu,"S/cm)" )), y = expression(paste("LN Conductivity (",mu,"S/cm)" ))) +
+  theme_classic(base_size = 12)
+
+d
+
+e=ggplot()+
+  geom_point(aes(x=dat1$realB, y=dat1$stdres), shape=1, size=2)+
+  geom_abline(intercept = 0, slope=0)+
+  geom_abline(intercept= -3, slope=0, lty=3)+
+  geom_abline(intercept= 3, slope=0, lty=3)+
+  scale_color_manual(values=c("dark green","purple3","navyblue","green4","magenta1","chartreuse","yellow","firebrick1","firebrick4","deeppink","cyan","blue"))+
+  labs(title="Residuals vs. Predicted",
+       x=expression(paste("Predicted N Conductivity (",mu,"S/cm)" )), y = "Standardized residuals") +
+  theme_classic(base_size = 12)
+
+
+plot_grid(d,e, ncol=2,align='vertical')
+
+
+
+
+#Calculating fitness of the curve based on OLS for each of the variables as predictor
+
+ssres=sum((dat2$predN-dat2$Cond_N)^2)
+sstot=sum((dat2$Cond_N-mean(dat2$Cond_N))^2)
+
+
+
+
+r2=1-(ssres/sstot) ### r2 for boiling as predictor variable is 0.82
+bias=sum(dat2$Cond_N-dat2$predN)/nrow(dat2)  ### bias is -0.31
+rmse= sqrt(sum((dat2$Cond_N-dat2$predN)^2))/nrow(dat2)  ### rmse is 0.82
+
+
+
+ssres2=sum((dat2$predboil-dat2$Cond_boiling)^2)
+sstot2=sum((dat2$Cond_boiling-mean(dat2$Cond_boiling))^2)
+
+r3=1-(ssres2/sstot2) ### r2 for nitrogen as predictor is 0.79
+bias=sum(dat2$Cond_boiling-dat2$predboil)/nrow(dat2)  ### bias is 0.53
+rmse= sqrt(sum((dat2$Cond_boiling-dat2$predboil)^2))/nrow(dat2)  ### rmse is 1.43
+
+
+
+
+b=as.numeric(deming(formula=Cond_N~Cond_boiling+0,data=dat2,conf=.95)$coef[2])  #getting a slope for the equation
+
+
+
+plot(dat1$Cond_boiling,(dat1$Cond_N-b*dat1$Cond_boiling))  ## plot of residuals
+
+
+#Testing the interaction with species in residuals
+
+lm1=least.rect(formula=(Cond_N-b*Cond_boiling)~Cond_boiling|Species,data=dat1, conf.level = 0.99, theo=0)
+
+summary(lm1) #Only CAMP and PLAT have significant linear correlation coefficients at alpha=0.05, little evidence of species specific need for correction
+
+
+# for (i in levels(dat1$Species)) {
+#   
+#   dat3=subset(dat1, Species %in% i)
+#   lm2=lm(formula=(Cond_N-b*Cond_boiling)~0+Cond_boiling,data=dat3)
+#   
+#   print(i)
+#   print(summary(lm2))
+#   
+# }
+
+
+#This will give coefficient to be added to "b" for each of the different species
+
+dat3=subset(dat1, Species %in% "CAMP")
+deming(formula=(Cond_N-b*Cond_boiling)~Cond_boiling+0,data=dat3,conf=.95)
+
+
+dat3=subset(dat1, Species %in% "PLAT")
+deming(formula=(Cond_N-b*Cond_boiling)~Cond_boiling+0,data=dat3,conf=.95)
+
+
+
+#### Final equation would be Cond_N = 0.575803709665071 * Cond_boiling (or Cond_N is ~57.6% of Cond_boiling) ####
+
+
+
+```
+
+
+
+####################################################################################
+####################################################################################
+#########                                                                  #########
+#########        START HERE     START HERE     START HERE                  #########
+#########                                                                  #########
+####################################################################################
+####################################################################################
+
+
+
+
+```{r}
+########## STANDARDIZED ON BOILING #################
+
+
+
+dat1=subset(dat, Date %in% "3/13/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+# dat3=dat1
+# 
+# dat3$Cond_freeze=dat3$Cond_N
+# dat3$RealT=-200
+# dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_boiling
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+
+
+
+library(car)
+Anova(lm1)
+
+
+plot(dat1$Rt,lm1$fitted.values, col=as.factor(dat1$RealT))
+abline(0,1)
+
+
+library(MASS)
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(3,0)
+plot(dat2$Ro,stud.res)
+hist(stud.res,breaks=50)
+library(car)
+qqPlot(stud.res)
+
+
+cooks.dist=cooks.distance(lm1)
+
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 4)
+
+
+
+dat1=dat1[not_outlier,]
+
+
+
+
+
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_boiling
+
+
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(1-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$Rt)
+
+hist(dat1$Rt[dat1$RealT==4], breaks=20)
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=100*dat1$Rt[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=48.9))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  scale_y_continuous(limits=c(-10,100))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+
+mod1=drm((dat1$Rt)~dat1$posRT,dat1$Species, fct=LL.4(fixed=c(NA,NA,NA,NA)), upperl =c(0,0.3,0.8,40) , type="continuous" )
+
+summary(mod1)
+
+
+
+library(sandwich)
+
+ED(mod1,50, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,0.50, interval="delta", type="absolute", level=0.95)
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+
+
+dat4=NULL
+
+for (i in levels(factor(dat1$Accession))) {
+  
+  subdat=subset(dat1, Accession %in% i)
+  
+  d=mean(tail(sort(subdat$Rt),9))
+  
+  mod2=drm((subdat$Rt)~subdat$posRT, fct=LL.4(fixed=c(NA,NA,NA,NA)), upperl =c(0,0.3,0.8,45), type="continuous" )
+  
+  print(summary(mod2))
+  
+  b=mod2$coefficients[1]
+  c=mod2$coefficients[2]
+  d=mod2$coefficients[3]
+  e=mod2$coefficients[4]
+  
+  twenty=as.numeric(as.character(ED(mod2,20, interval="delta", type="relative", level=0.95)[1]))-10
+  fifty=as.numeric(as.character(ED(mod2,50, interval="delta", type="relative", level=0.95)[1]))-10
+  eighty=as.numeric(as.character(ED(mod2,80, interval="delta", type="relative", level=0.95)[1]))-10
+  absfif=as.numeric(as.character(ED(mod2,0.50, interval="delta", type="absolute", level=0.95)[1]))-10
+
+  
+  dat4=rbind(dat4,c("Rt_boiling",i,levels(factor(subdat$Species)),b,c,d,e,twenty,fifty,eighty,absfif))
+  
+  
+}
+
+dat4=data.frame(dat4)
+colnames(dat4)=c("Method","Accession","Species","b","c","d","e","twenty","fifty","eighty","absfif")
+
+dat4$b=as.numeric(as.character(dat4$b))
+dat4$c=as.numeric(as.character(dat4$c))
+dat4$d=as.numeric(as.character(dat4$d))
+dat4$e=as.numeric(as.character(dat4$e))
+dat4$twenty=-as.numeric(as.character(dat4$twenty))
+dat4$fifty=-as.numeric(as.character(dat4$fifty))
+dat4$eighty=-as.numeric(as.character(dat4$eighty))
+dat4$absfif=-as.numeric(as.character(dat4$absfif))
+
+
+write.csv(dat4, "ResultsbyAccession-Rt_boiling.csv")
+
+
+
+
+for (i in levels(dat1$Species)) {
+  
+  subdat=subset(dat1, Species %in% i)
+  
+  subdat4=subset(dat4, Accession %in% levels(factor(subdat$Accession)))
+  
+  mod1=drm((subdat$Rt)~subdat$posRT, fct=LL.4(fixed=c(NA,NA,NA,NA)), start=c(-7.3,0.3,0.6,30), upperl =c(0,0.3,0.9,40) , type="continuous" )
+  
+  
+  
+  (vc <- vcov(mod1))
+
+coef(summary(mod1))[, "Std. Error"]
+
+sqrt(diag(vc))
+
+require("MASS")
+set.seed(345)
+nsim <- 5000
+sim <- mvrnorm(nsim, mu = coef(mod1),  Sigma = vc)
+head(sim)
+
+take <- data.frame(sample(nrow(sim), 100)) ## take 25 simulations at random
+
+colnames(take)="take"
+
+dat.pred=NULL
+dat.pred$x=seq(0,95,1)
+dat.pred=data.frame(dat.pred)
+
+
+for (j in take$take){
+  
+
+  g=sim[j,1]
+  n=sim[j,2]
+  m=sim[j,3]
+  h=sim[j,4]
+  
+  
+  #print(paste(b, e, f, g, h,((g>0) | (b>0) | (f<0.11)) ))
+  
+
+  
+  y =100*n+(100* (m-n))/(1+exp(g*(log(dat.pred$x)-log(h))))
+  
+  dat.pred=cbind(dat.pred,y)
+}
+
+
+colnames(dat.pred)=c("x", seq(1, ncol(dat.pred)-1,1))
+
+dat.pred=data.frame(dat.pred[1],stack(dat.pred[2:ncol(dat.pred)]))
+  
+  
+  
+  
+  
+  
+  x=seq(0,95,1)
+  
+  pred=data.frame(x)
+  
+  for (j in levels(factor(subdat4$Accession))) {
+    
+    y=(subdat4$c[subdat4$Accession==j]*100)+(100*(subdat4$d[subdat4$Accession==j]-subdat4$c[subdat4$Accession==j]))/(1+exp(subdat4$b[subdat4$Accession==j]*(log(x)-log(subdat4$e[subdat4$Accession==j]))))
+    
+    pred=cbind(pred,y)
+    
+  }
+
+  colnames(pred)=c("x",levels(factor(subdat4$Accession)))
+  pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+  colnames(pred)=c("x","y","Accession")
+  
+  
+  predL= (100*mod1$coefficients[2])+(100*(mod1$coefficients[3]-mod1$coefficients[2]))/(1+exp(mod1$coefficients[1]*(log(x)-log(mod1$coefficients[4]))))
+  
+  
+    print(ggplot()+
+          geom_line(aes(x=-dat.pred$x+10, y=dat.pred$values, group=dat.pred$ind ), alpha=0.1, size=0.2)+
+        geom_line(aes(x=-pred$x+10,y=pred$y, col=pred$Accession), lty=2, size=0.7)+
+        geom_line(aes(x=-x+10, y=predL), size=0.6)+
+        geom_point(aes(x=subdat$RealT, y=100*subdat$Rt, fill=subdat$Accession), shape=21, position = position_dodge(width=2), size=2.5)+
+          scale_y_continuous(limits=c(-10,110), breaks=c(0,25,50,75,100))+
+          ylab("Electrolyte Leakage (% Nitrogen Leakage)") + xlab("Temperature (°C)") +
+          labs(col="Accession",fill="Accession")+
+          ggtitle(i)+
+          theme_bw(base_size = 14)+
+          theme(legend.position = c(0.8,0.8),
+                legend.text.align= 1,
+                legend.text = element_text(size=12),
+                panel.grid.minor = element_blank(),
+                legend.background = element_rect(fill="transparent"),
+                legend.key = element_rect( fill = NA),
+                panel.border = element_rect(size=1),
+                axis.text=element_text(color="black"))
+    
+    )
+  
+  
+  
+}
+
+
+
+
+```
+
+
+
+
+
+```{r}
+########## STANDARDIZED ON NITROGEN #################
+
+
+
+dat1=subset(dat, Date %in% "3/13/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+# dat3=dat1
+# 
+# dat3$Cond_freeze=dat3$Cond_N
+# dat3$RealT=-200
+# dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_N
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+
+
+
+library(car)
+Anova(lm1)
+
+
+plot(dat1$Rt,lm1$fitted.values, col=as.factor(dat1$RealT))
+abline(0,1)
+
+
+library(MASS)
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(c(4,-4),0)
+plot(dat1$Rt,stud.res)
+hist(stud.res,breaks=50)
+library(car)
+qqPlot(stud.res)
+
+
+cooks.dist=cooks.distance(lm1)
+
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 4)
+
+
+
+dat1=dat1[not_outlier,]
+
+
+
+
+
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_N
+
+
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(1-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$Rt)
+
+hist(dat1$Rt[dat1$RealT==4], breaks=20)
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=100*dat1$Rt[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=48.9))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  scale_y_continuous(limits=c(-10,100))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+
+mod1=drm((dat1$Rt)~dat1$posRT,dat1$Species, fct=LL.4(fixed=c(NA,NA,NA,NA)), upperl =c(0,0.3,0.9,40) , type="continuous" )
+
+summary(mod1)
+
+
+
+library(sandwich)
+
+ED(mod1,50, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,0.50, interval="delta", type="absolute", level=0.95)
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+
+
+dat4=NULL
+
+for (i in levels(factor(dat1$Accession))) {
+  
+  subdat=subset(dat1, Accession %in% i)
+  
+  d=mean(tail(sort(subdat$Rt),9))
+  
+  mod2=drm((subdat$Rt)~subdat$posRT, fct=LL.4(fixed=c(NA,NA,NA,NA)), upperl =c(0,0.3,1.5,45), type="continuous" )
+  
+  print(summary(mod2))
+  
+  b=mod2$coefficients[1]
+  c=mod2$coefficients[2]
+  d=mod2$coefficients[3]
+  e=mod2$coefficients[4]
+  
+  twenty=as.numeric(as.character(ED(mod2,20, interval="delta", type="relative", level=0.95)[1]))-10
+  fifty=as.numeric(as.character(ED(mod2,50, interval="delta", type="relative", level=0.95)[1]))-10
+  eighty=as.numeric(as.character(ED(mod2,80, interval="delta", type="relative", level=0.95)[1]))-10
+  absfif=as.numeric(as.character(ED(mod2,0.5, interval="delta", type="absolute", level=0.95)[1]))-10
+  
+  dat4=rbind(dat4,c("Rt_Nitrogen",i,levels(factor(subdat$Species)),b,c,d,e,twenty,fifty,eighty,absfif))
+  
+  
+}
+
+dat4=data.frame(dat4)
+colnames(dat4)=c("Method","Accession","Species","b","c","d","e","twenty","fifty","eighty","absfif")
+
+dat4$b=as.numeric(as.character(dat4$b))
+dat4$c=as.numeric(as.character(dat4$c))
+dat4$d=as.numeric(as.character(dat4$d))
+dat4$e=as.numeric(as.character(dat4$e))
+dat4$twenty=-as.numeric(as.character(dat4$twenty))
+dat4$fifty=-as.numeric(as.character(dat4$fifty))
+dat4$eighty=-as.numeric(as.character(dat4$eighty))
+dat4$absfif=-as.numeric(as.character(dat4$absfif))
+
+
+write.csv(dat4, "ResultsbyAccession-Rt_Nitrogen.csv")
+
+
+
+for (i in levels(dat1$Species)) {
+  
+  subdat=subset(dat1, Species %in% i)
+  
+  subdat4=subset(dat4, Accession %in% levels(factor(subdat$Accession)))
+  
+  mod1=drm((subdat$Rt)~subdat$posRT, fct=LL.4(fixed=c(NA,NA,NA,NA)), start=c(-7.3,0.3,0.6,30), upperl =c(0,0.3,0.9,40) , type="continuous" )
+  
+  
+  
+  (vc <- vcov(mod1))
+
+coef(summary(mod1))[, "Std. Error"]
+
+sqrt(diag(vc))
+
+require("MASS")
+set.seed(345)
+nsim <- 5000
+sim <- mvrnorm(nsim, mu = coef(mod1),  Sigma = vc)
+head(sim)
+
+take <- data.frame(sample(nrow(sim), 100)) ## take 25 simulations at random
+
+colnames(take)="take"
+
+dat.pred=NULL
+dat.pred$x=seq(0,95,1)
+dat.pred=data.frame(dat.pred)
+
+
+for (j in take$take){
+  
+
+  g=sim[j,1]
+  n=sim[j,2]
+  m=sim[j,3]
+  h=sim[j,4]
+  
+  
+  #print(paste(b, e, f, g, h,((g>0) | (b>0) | (f<0.11)) ))
+  
+
+  
+  y =100*n+(100* (m-n))/(1+exp(g*(log(dat.pred$x)-log(h))))
+  
+  dat.pred=cbind(dat.pred,y)
+}
+
+
+colnames(dat.pred)=c("x", seq(1, ncol(dat.pred)-1,1))
+
+dat.pred=data.frame(dat.pred[1],stack(dat.pred[2:ncol(dat.pred)]))
+  
+  
+  
+  
+  
+  
+  x=seq(0,95,1)
+  
+  pred=data.frame(x)
+  
+  for (j in levels(factor(subdat4$Accession))) {
+    
+    y=(subdat4$c[subdat4$Accession==j]*100)+(100*(subdat4$d[subdat4$Accession==j]-subdat4$c[subdat4$Accession==j]))/(1+exp(subdat4$b[subdat4$Accession==j]*(log(x)-log(subdat4$e[subdat4$Accession==j]))))
+    
+    pred=cbind(pred,y)
+    
+  }
+
+  colnames(pred)=c("x",levels(factor(subdat4$Accession)))
+  pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+  colnames(pred)=c("x","y","Accession")
+  
+  
+  predL= (100*mod1$coefficients[2])+(100*(mod1$coefficients[3]-mod1$coefficients[2]))/(1+exp(mod1$coefficients[1]*(log(x)-log(mod1$coefficients[4]))))
+  
+  
+    print(ggplot()+
+          geom_line(aes(x=-dat.pred$x+10, y=dat.pred$values, group=dat.pred$ind ), alpha=0.1, size=0.2)+
+        geom_line(aes(x=-pred$x+10,y=pred$y, col=pred$Accession), lty=2, size=0.7)+
+        geom_line(aes(x=-x+10, y=predL), size=0.6)+
+        geom_point(aes(x=subdat$RealT, y=100*subdat$Rt, fill=subdat$Accession), shape=21, position = position_dodge(width=2), size=2.5)+
+          scale_y_continuous(limits=c(-10,110), breaks=c(0,25,50,75,100))+
+          ylab("Electrolyte Leakage (% Nitrogen Leakage)") + xlab("Temperature (°C)") +
+          labs(col="Accession",fill="Accession")+
+          ggtitle(i)+
+          theme_bw(base_size = 14)+
+          theme(legend.position = c(0.8,0.8),
+                legend.text.align= 1,
+                legend.text = element_text(size=12),
+                panel.grid.minor = element_blank(),
+                legend.background = element_rect(fill="transparent"),
+                legend.key = element_rect( fill = NA),
+                panel.border = element_rect(size=1),
+                axis.text=element_text(color="black"))
+    
+    )
+  
+  
+  
+}
+
+
+
+
+```
+
+
+
+
+```{r}
+
+
+######### RELATIVE MEASUREMENTS - BOILING #############
+
+
+dat1=subset(dat, Date %in% "3/13/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+# dat3=dat1
+# 
+# dat3$Cond_freeze=dat3$Cond_N
+# dat3$RealT=-200
+# dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_boiling
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+
+
+
+library(car)
+Anova(lm1)
+
+
+plot(dat1$Rt,lm1$fitted.values, col=as.factor(dat1$RealT))
+abline(0,1)
+
+
+library(MASS)
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(3,0)
+plot(dat2$Ro,stud.res)
+hist(stud.res,breaks=50)
+library(car)
+qqPlot(stud.res)
+
+
+cooks.dist=cooks.distance(lm1)
+
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 4)
+
+
+
+dat1=dat1[not_outlier,]
+
+
+
+
+
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_boiling
+
+
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+dat2=dat1
+dat2=aggregate(Rt~Accession+RealT,dat2,mean)
+dat2=aggregate(Rt~Accession,dat2,max)
+
+colnames(dat2)=c("Accession","Rmax")
+
+
+dat1=merge(dat1,dat2,by="Accession")
+
+
+
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(dat1$Rmax-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$L)
+
+hist(dat1$Rt[dat1$RealT==4], breaks=20)
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=dat1$L[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=48.9))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  scale_y_continuous(limits=c(-10,120))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+
+mod1=drm((dat1$L/100)~dat1$posRT,dat1$Species, fct=LL.2() , type="continuous" )
+
+summary(mod1)
+
+
+
+library(sandwich)
+
+ED(mod1,50, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,0.50, interval="delta", type="absolute", level=0.95)
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+
+
+dat4=NULL
+
+for (i in levels(factor(dat1$Accession))) {
+  
+  subdat=subset(dat1, Accession %in% i)
+  mod2=drm((subdat$L/100)~subdat$posRT, fct=LL.2(),  type="continuous" )
+  
+  print(summary(mod2))
+  
+  b=mod2$coefficients[1]
+  e=mod2$coefficients[2]
+  
+    
+  twenty=as.numeric(as.character(ED(mod2,20, interval="delta", type="relative", level=0.95)[1]))-10
+  fifty=as.numeric(as.character(ED(mod2,50, interval="delta", type="relative", level=0.95)[1]))-10
+  eighty=as.numeric(as.character(ED(mod2,80, interval="delta", type="relative", level=0.95)[1]))-10
+
+  
+  dat4=rbind(dat4,c("L_boiling",i,levels(factor(subdat$Species)),b,e,twenty,fifty,eighty))
+  
+  
+}
+
+dat4=data.frame(dat4)
+colnames(dat4)=c("Method","Accession","Species","b","e","twenty","fifty","eighty")
+
+dat4$b=as.numeric(as.character(dat4$b))
+dat4$e=as.numeric(as.character(dat4$e))
+dat4$twenty=-as.numeric(as.character(dat4$twenty))
+dat4$fifty=-as.numeric(as.character(dat4$fifty))
+dat4$eighty=-as.numeric(as.character(dat4$eighty))
+
+
+write.csv(dat4, "ResultsbyAccession-L_boiling.csv")
+
+
+for (i in levels(dat1$Species)) {
+  
+  subdat=subset(dat1, Species %in% i)
+  
+  subdat4=subset(dat4, Accession %in% levels(factor(subdat$Accession)))
+  
+  mod1=drm((subdat$L/100)~subdat$posRT, fct=LL.2(),  type="continuous" )
+  
+  
+  
+  (vc <- vcov(mod1))
+
+coef(summary(mod1))[, "Std. Error"]
+
+sqrt(diag(vc))
+
+require("MASS")
+set.seed(10)
+nsim <- 5000
+sim <- mvrnorm(nsim, mu = coef(mod1),  Sigma = vc)
+head(sim)
+
+take <- data.frame(sample(nrow(sim), 100)) ## take 25 simulations at random
+
+colnames(take)="take"
+
+dat.pred=NULL
+dat.pred$x=seq(0,95,1)
+dat.pred=data.frame(dat.pred)
+
+
+for (j in take$take){
+  
+
+  g=sim[j,1]
+  h=sim[j,2]
+  
+  
+  #print(paste(b, e, f, g, h,((g>0) | (b>0) | (f<0.11)) ))
+  
+
+  
+  y =(100)/(1+exp(g*(log(dat.pred$x)-log(h))))
+  
+  dat.pred=cbind(dat.pred,y)
+}
+
+
+colnames(dat.pred)=c("x", seq(1, ncol(dat.pred)-1,1))
+
+dat.pred=data.frame(dat.pred[1],stack(dat.pred[2:ncol(dat.pred)]))
+  
+  
+  
+  
+  
+  
+  x=seq(0,95,1)
+  
+  pred=data.frame(x)
+  
+  for (j in levels(factor(subdat4$Accession))) {
+    
+    y=(100)/(1+exp(subdat4$b[subdat4$Accession==j]*(log(x)-log(subdat4$e[subdat4$Accession==j]))))
+    
+    pred=cbind(pred,y)
+    
+  }
+
+  colnames(pred)=c("x",levels(factor(subdat4$Accession)))
+  pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+  colnames(pred)=c("x","y","Accession")
+  
+  
+  predL= (100)/(1+exp(mod1$coefficients[1]*(log(x)-log(mod1$coefficients[2]))))
+  
+  
+  subdat2=data.frame(aggregate(L~Accession+RealT,subdat,mean))
+  subdat3=data.frame(aggregate(L~Accession+RealT,subdat,sd))
+  
+
+  
+    print(ggplot()+
+          geom_line(aes(x=-dat.pred$x+10, y=dat.pred$values, group=dat.pred$ind ), alpha=0.1, size=0.2)+
+        geom_line(aes(x=-pred$x+10,y=pred$y, col=pred$Accession), lty=2, size=0.7)+
+        geom_line(aes(x=-x+10, y=predL), size=0.6)+
+          geom_errorbar(aes(ymin=subdat2$L-subdat3$L, ymax=subdat2$L+subdat3$L, x=subdat2$RealT, group=subdat2$Accession),position = position_dodge(width=1),width=2, size=0.5)+
+        geom_point(aes(x=subdat2$RealT, y=subdat2$L, fill=subdat2$Accession), shape=21, position = position_dodge(width=1), size=2.5)+
+          scale_y_continuous(limits=c(-30,140), breaks=c(0,25,50,75,100))+
+          ylab("Electrolyte Leakage (%)") + xlab("Temperature (°C)") +
+          labs(col="Accession",fill="Accession")+
+          ggtitle(i)+
+          theme_bw(base_size = 14)+
+          theme(legend.position = c(0.8,0.8),
+                legend.text.align= 0,
+                legend.text = element_text(size=12),
+                panel.grid.minor = element_blank(),
+                legend.background = element_rect(fill="transparent"),
+                legend.key = element_rect( fill = NA),
+                panel.border = element_rect(size=1),
+                axis.text=element_text(color="black"))
+    
+    )
+  
+}
+
+
+
+
+```
+
+
+
+
+```{r}
+
+
+######### RELATIVE MEASUREMENTS - NITROGEN #############
+
+
+dat1=subset(dat, Date %in% "3/13/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+# dat3=dat1
+# 
+# dat3$Cond_freeze=dat3$Cond_N
+# dat3$RealT=-200
+# dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_N
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+
+
+
+library(car)
+Anova(lm1)
+
+
+plot(dat1$Rt,lm1$fitted.values, col=as.factor(dat1$RealT))
+abline(0,1)
+
+
+library(MASS)
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(3,0)
+plot(dat2$Ro,stud.res)
+hist(stud.res,breaks=50)
+library(car)
+qqPlot(stud.res)
+
+
+cooks.dist=cooks.distance(lm1)
+
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 4)
+
+
+
+dat1=dat1[not_outlier,]
+
+
+
+
+
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_N
+
+
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+dat2=dat1
+dat2=aggregate(Rt~Accession+RealT,dat2,mean)
+dat2=aggregate(Rt~Accession,dat2,max)
+
+colnames(dat2)=c("Accession","Rmax")
+
+
+dat1=merge(dat1,dat2,by="Accession")
+
+
+
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(dat1$Rmax-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$L)
+
+hist(dat1$Rt[dat1$RealT==4], breaks=20)
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=dat1$L[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=48.9))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  scale_y_continuous(limits=c(-10,120))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+
+mod1=drm((dat1$L/100)~dat1$posRT,dat1$Species, fct=LL.2() , type="continuous" )
+
+summary(mod1)
+
+
+
+library(sandwich)
+
+ED(mod1,50, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,0.50, interval="delta", type="absolute", level=0.95)
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+
+
+dat4=NULL
+
+for (i in levels(factor(dat1$Accession))) {
+  
+  subdat=subset(dat1, Accession %in% i)
+  mod2=drm((subdat$L/100)~subdat$posRT, fct=LL.2(),  type="continuous" )
+  
+  print(summary(mod2))
+  
+  b=mod2$coefficients[1]
+  e=mod2$coefficients[2]
+  
+    
+  twenty=as.numeric(as.character(ED(mod2,20, interval="delta", type="relative", level=0.95)[1]))-10
+  fifty=as.numeric(as.character(ED(mod2,50, interval="delta", type="relative", level=0.95)[1]))-10
+  eighty=as.numeric(as.character(ED(mod2,80, interval="delta", type="relative", level=0.95)[1]))-10
+
+  
+  dat4=rbind(dat4,c("L_Nitrogen",i,levels(factor(subdat$Species)),b,e,twenty,fifty,eighty))
+  
+  
+}
+
+dat4=data.frame(dat4)
+colnames(dat4)=c("Method","Accession","Species","b","e","twenty","fifty","eighty")
+
+dat4$b=as.numeric(as.character(dat4$b))
+dat4$e=as.numeric(as.character(dat4$e))
+dat4$twenty=-as.numeric(as.character(dat4$twenty))
+dat4$fifty=-as.numeric(as.character(dat4$fifty))
+dat4$eighty=-as.numeric(as.character(dat4$eighty))
+
+
+write.csv(dat4, "ResultsbyAccession-L_Nitrogen.csv")
+
+
+for (i in levels(dat1$Species)) {
+  
+  subdat=subset(dat1, Species %in% i)
+  
+  subdat4=subset(dat4, Accession %in% levels(factor(subdat$Accession)))
+  
+  mod1=drm((subdat$L/100)~subdat$posRT, fct=LL.2(),  type="continuous" )
+  
+  
+  
+  (vc <- vcov(mod1))
+
+coef(summary(mod1))[, "Std. Error"]
+
+sqrt(diag(vc))
+
+require("MASS")
+set.seed(10)
+nsim <- 5000
+sim <- mvrnorm(nsim, mu = coef(mod1),  Sigma = vc)
+head(sim)
+
+take <- data.frame(sample(nrow(sim), 100)) ## take 25 simulations at random
+
+colnames(take)="take"
+
+dat.pred=NULL
+dat.pred$x=seq(0,95,1)
+dat.pred=data.frame(dat.pred)
+
+
+for (j in take$take){
+  
+
+  g=sim[j,1]
+  h=sim[j,2]
+  
+  
+  #print(paste(b, e, f, g, h,((g>0) | (b>0) | (f<0.11)) ))
+  
+
+  
+  y =(100)/(1+exp(g*(log(dat.pred$x)-log(h))))
+  
+  dat.pred=cbind(dat.pred,y)
+}
+
+
+colnames(dat.pred)=c("x", seq(1, ncol(dat.pred)-1,1))
+
+dat.pred=data.frame(dat.pred[1],stack(dat.pred[2:ncol(dat.pred)]))
+  
+  
+  
+  
+  
+  
+  x=seq(0,95,1)
+  
+  pred=data.frame(x)
+  
+  for (j in levels(factor(subdat4$Accession))) {
+    
+    y=(100)/(1+exp(subdat4$b[subdat4$Accession==j]*(log(x)-log(subdat4$e[subdat4$Accession==j]))))
+    
+    pred=cbind(pred,y)
+    
+  }
+
+  colnames(pred)=c("x",levels(factor(subdat4$Accession)))
+  pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+  colnames(pred)=c("x","y","Accession")
+  
+  
+  predL= (100)/(1+exp(mod1$coefficients[1]*(log(x)-log(mod1$coefficients[2]))))
+  
+  
+  subdat2=data.frame(aggregate(L~Accession+RealT,subdat,mean))
+  subdat3=data.frame(aggregate(L~Accession+RealT,subdat,sd))
+  
+
+  
+    print(ggplot()+
+          geom_line(aes(x=-dat.pred$x+10, y=dat.pred$values, group=dat.pred$ind ), alpha=0.1, size=0.2)+
+        geom_line(aes(x=-pred$x+10,y=pred$y, col=pred$Accession), lty=2, size=0.7)+
+        geom_line(aes(x=-x+10, y=predL), size=0.6)+
+          geom_errorbar(aes(ymin=subdat2$L-subdat3$L, ymax=subdat2$L+subdat3$L, x=subdat2$RealT, group=subdat2$Accession),position = position_dodge(width=1),width=2, size=0.5)+
+        geom_point(aes(x=subdat2$RealT, y=subdat2$L, fill=subdat2$Accession), shape=21, position = position_dodge(width=1), size=2.5)+
+          scale_y_continuous(limits=c(-30,140), breaks=c(0,25,50,75,100))+
+          ylab("Electrolyte Leakage (%)") + xlab("Temperature (°C)") +
+          labs(col="Accession",fill="Accession")+
+          ggtitle(i)+
+          theme_bw(base_size = 14)+
+          theme(legend.position = c(0.8,0.8),
+                legend.text.align= 0,
+                legend.text = element_text(size=12),
+                panel.grid.minor = element_blank(),
+                legend.background = element_rect(fill="transparent"),
+                legend.key = element_rect( fill = NA),
+                panel.border = element_rect(size=1),
+                axis.text=element_text(color="black"))
+    
+    )
+  
+}
+
+
+
+
+```
+
+
+
+```{r}
+
+
+######### RELATIVE MEASUREMENTS - NITROGEN - Gompertz curve #############
+
+
+dat1=subset(dat, Date %in% "3/13/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+# dat3=dat1
+# 
+# dat3$Cond_freeze=dat3$Cond_N
+# dat3$RealT=-200
+# dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_N
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+
+
+
+library(car)
+Anova(lm1)
+
+
+plot(dat1$Rt,lm1$fitted.values, col=as.factor(dat1$RealT))
+abline(0,1)
+
+
+library(MASS)
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(3,0)
+plot(dat2$Ro,stud.res)
+hist(stud.res,breaks=50)
+library(car)
+qqPlot(stud.res)
+
+
+cooks.dist=cooks.distance(lm1)
+
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 4)
+
+
+
+dat1=dat1[not_outlier,]
+
+
+
+
+
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_N
+
+
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+dat2=dat1
+dat2=aggregate(Rt~Accession+RealT,dat2,mean)
+dat2=aggregate(Rt~Accession,dat2,max)
+
+colnames(dat2)=c("Accession","Rmax")
+
+
+dat1=merge(dat1,dat2,by="Accession")
+
+
+
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(dat1$Rmax-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$L)
+
+hist(dat1$Rt[dat1$RealT==4], breaks=20)
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=dat1$L[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=48.9))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  scale_y_continuous(limits=c(-10,120))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+
+mod1=drm((dat1$L/100)~dat1$posRT,dat1$Species, fct=gompertz(fixed=c(NA,0,1,NA)) , type="continuous" )
+
+summary(mod1)
+
+
+
+library(sandwich)
+
+ED(mod1,50, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,0.50, interval="delta", type="absolute", level=0.95)
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+
+
+dat4=NULL
+
+for (i in levels(factor(dat1$Accession))) {
+  
+  subdat=subset(dat1, Accession %in% i)
+
+  
+  vini.lm4= nls(L~100*exp(-b*exp(-k*posRT))
+              
+              , data=subdat, start=list(b=3,k=0.05),upper = list(b=100,k=0.3), algorithm="port",trace=T)
+  
+  
+  print(summary(vini.lm4))
+  
+  b=summary(vini.lm4)$coefficients[1]
+  k=summary(vini.lm4)$coefficients[2]
+  
+ 
+  twenty=-log(log(5)/b)/k-10
+  fifty=-log(log(2)/b)/k-10
+  eighty=-log(log(1.25)/b)/k-10
+  
+  tmax=-log(1/(b))/k-10
+
+
+  
+  dat4=rbind(dat4,c("L_Nitrogen_Gomp",i,levels(factor(subdat$Species)),b,k,twenty,fifty,eighty, tmax))
+  
+  
+}
+
+dat4=data.frame(dat4)
+colnames(dat4)=c("Method","Accession","Species","b","k","twenty","fifty","eighty","tmax")
+
+dat4$b=as.numeric(as.character(dat4$b))
+dat4$k=as.numeric(as.character(dat4$k))
+dat4$twenty=-as.numeric(as.character(dat4$twenty))
+dat4$fifty=-as.numeric(as.character(dat4$fifty))
+dat4$eighty=-as.numeric(as.character(dat4$eighty))
+dat4$tmax=-as.numeric(as.character(dat4$tmax))
+
+write.csv(dat4, "ResultsbyAccession-L_Nitrogen-Gompertz.csv")
+
+
+for (i in levels(dat1$Species)) {
+  
+  subdat=subset(dat1, Species %in% i)
+  
+  subdat4=subset(dat4, Accession %in% levels(factor(subdat$Accession)))
+  
+  mod1= nls(L~100*exp(-b*exp(-k*posRT))
+              
+              , data=subdat, start=list(b=3,k=0.05),upper = list(b=100,k=0.3), algorithm="port",trace=T)
+  
+  
+  (vc <- vcov(mod1))
+
+coef(summary(mod1))[, "Std. Error"]
+
+sqrt(diag(vc))
+
+require("MASS")
+set.seed(10)
+nsim <- 5000
+sim <- mvrnorm(nsim, mu = coef(mod1),  Sigma = vc)
+head(sim)
+
+take <- data.frame(sample(nrow(sim), 100)) ## take 25 simulations at random
+
+colnames(take)="take"
+
+dat.pred=NULL
+dat.pred$x=seq(0,95,1)
+dat.pred=data.frame(dat.pred)
+
+
+for (j in take$take){
+  
+
+  g=sim[j,1]
+  h=sim[j,2]
+  
+  
+  #print(paste(b, e, f, g, h,((g>0) | (b>0) | (f<0.11)) ))
+  
+
+  
+  y =100*exp(-g*exp(-h*dat.pred$x))
+  
+  dat.pred=cbind(dat.pred,y)
+}
+
+
+colnames(dat.pred)=c("x", seq(1, ncol(dat.pred)-1,1))
+
+dat.pred=data.frame(dat.pred[1],stack(dat.pred[2:ncol(dat.pred)]))
+  
+  
+  
+  
+  
+  
+  x=seq(0,95,1)
+  
+  pred=data.frame(x)
+  
+  for (j in levels(factor(subdat4$Accession))) {
+    
+    y=100*exp(-subdat4$b[subdat4$Accession==j]*exp(-subdat4$k[subdat4$Accession==j]*x))
+    
+    pred=cbind(pred,y)
+    
+  }
+
+  colnames(pred)=c("x",levels(factor(subdat4$Accession)))
+  pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+  colnames(pred)=c("x","y","Accession")
+  
+  
+  predL= 100*exp(-summary(mod1)$coefficients[1]*exp(-summary(mod1)$coefficients[2]*x))
+    
+  
+  
+  subdat2=data.frame(aggregate(L~Accession+RealT,subdat,mean))
+  subdat3=data.frame(aggregate(L~Accession+RealT,subdat,sd))
+  
+
+  
+    print(ggplot()+
+          geom_line(aes(x=-dat.pred$x+10, y=dat.pred$values, group=dat.pred$ind ), alpha=0.1, size=0.2)+
+        geom_line(aes(x=-pred$x+10,y=pred$y, col=pred$Accession), lty=2, size=0.7)+
+        geom_line(aes(x=-x+10, y=predL), size=0.6)+
+          geom_errorbar(aes(ymin=subdat2$L-subdat3$L, ymax=subdat2$L+subdat3$L, x=subdat2$RealT, group=subdat2$Accession),position = position_dodge(width=1),width=2, size=0.5)+
+        geom_point(aes(x=subdat2$RealT, y=subdat2$L, fill=subdat2$Accession), shape=21, position = position_dodge(width=1), size=2.5)+
+          scale_y_continuous(limits=c(-30,140), breaks=c(0,25,50,75,100))+
+          ylab("Electrolyte Leakage (%)") + xlab("Temperature (°C)") +
+          labs(col="Accession",fill="Accession")+
+          ggtitle(i)+
+          theme_bw(base_size = 14)+
+          theme(legend.position = c(0.8,0.8),
+                legend.text.align= 0,
+                legend.text = element_text(size=12),
+                panel.grid.minor = element_blank(),
+                legend.background = element_rect(fill="transparent"),
+                legend.key = element_rect( fill = NA),
+                panel.border = element_rect(size=1),
+                axis.text=element_text(color="black"))
+    
+    )
+  
+}
+
+
+
+
+```
+
+
+```{r}
+########## STANDARDIZED ON NITROGEN - Bringing 4C to 0 - Not necessary, doesnt work #################
+
+
+
+dat1=subset(dat, Date %in% "3/13/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+# dat3=dat1
+# 
+# dat3$Cond_freeze=dat3$Cond_N
+# dat3$RealT=-200
+# dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_N
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+
+
+
+library(car)
+Anova(lm1)
+
+
+plot(dat1$Rt,lm1$fitted.values, col=as.factor(dat1$RealT))
+abline(0,1)
+
+
+library(MASS)
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(c(4,-4),0)
+plot(dat1$Rt,stud.res)
+hist(stud.res,breaks=50)
+library(car)
+qqPlot(stud.res)
+
+
+cooks.dist=cooks.distance(lm1)
+
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 4)
+
+
+
+dat1=dat1[not_outlier,]
+
+
+
+
+
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_N
+
+
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(1-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$L)
+
+hist(dat1$Rt[dat1$RealT==4], breaks=20)
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=100*dat1$Rt[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=48.9))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  scale_y_continuous(limits=c(-10,100))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+
+mod1=drm((dat1$L)~dat1$posRT,dat1$Species, fct=LL.4(fixed=c(NA,0,NA,NA)), upperl =c(0,90,40) , type="continuous" )
+
+summary(mod1)
+
+
+
+library(sandwich)
+
+ED(mod1,50, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,40, interval="delta", type="absolute", level=0.95)-10
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+
+
+dat4=NULL
+
+for (i in levels(factor(dat1$Accession))) {
+  
+  subdat=subset(dat1, Accession %in% i)
+  
+  d=mean(tail(sort(subdat$Rt),9))
+  
+  mod2=drm((subdat$L)~subdat$posRT, fct=LL.4(fixed=c(NA,0,NA,NA)), upperl =c(0,90,45), type="continuous" )
+  
+  print(summary(mod2))
+  
+  b=mod2$coefficients[1]
+  d=mod2$coefficients[2]
+  e=mod2$coefficients[3]
+  
+  twenty=as.numeric(as.character(ED(mod2,20, interval="delta", type="relative", level=0.95)[1]))-10
+  fifty=as.numeric(as.character(ED(mod2,50, interval="delta", type="relative", level=0.95)[1]))-10
+  eighty=as.numeric(as.character(ED(mod2,80, interval="delta", type="relative", level=0.95)[1]))-10
+  absfif=as.numeric(as.character(ED(mod2,0.5, interval="delta", type="absolute", level=0.95)[1]))-10
+  
+  dat4=rbind(dat4,c("Rt_Nitrogen_zeroed",i,levels(factor(subdat$Species)),b,d,e,twenty,fifty,eighty,absfif))
+  
+  
+}
+
+dat4=data.frame(dat4)
+colnames(dat4)=c("Method","Accession","Species","b","d","e","twenty","fifty","eighty","absfif")
+
+dat4$b=as.numeric(as.character(dat4$b))
+dat4$d=as.numeric(as.character(dat4$d))
+dat4$e=as.numeric(as.character(dat4$e))
+dat4$twenty=-as.numeric(as.character(dat4$twenty))
+dat4$fifty=-as.numeric(as.character(dat4$fifty))
+dat4$eighty=-as.numeric(as.character(dat4$eighty))
+dat4$absfif=-as.numeric(as.character(dat4$absfif))
+
+
+write.csv(dat4, "ResultsbyAccession-Rt_Nitrogen_zeroed.csv")
+
+
+
+for (i in levels(dat1$Species)) {
+  
+  subdat=subset(dat1, Species %in% i)
+  
+  subdat4=subset(dat4, Accession %in% levels(factor(subdat$Accession)))
+  
+  mod1=drm((subdat$Rt)~subdat$posRT, fct=LL.4(fixed=c(NA,NA,NA,NA)), start=c(-7.3,0.3,0.6,30), upperl =c(0,0.3,0.9,40) , type="continuous" )
+  
+  
+  
+  (vc <- vcov(mod1))
+
+coef(summary(mod1))[, "Std. Error"]
+
+sqrt(diag(vc))
+
+require("MASS")
+set.seed(345)
+nsim <- 5000
+sim <- mvrnorm(nsim, mu = coef(mod1),  Sigma = vc)
+head(sim)
+
+take <- data.frame(sample(nrow(sim), 100)) ## take 25 simulations at random
+
+colnames(take)="take"
+
+dat.pred=NULL
+dat.pred$x=seq(0,95,1)
+dat.pred=data.frame(dat.pred)
+
+
+for (j in take$take){
+  
+
+  g=sim[j,1]
+  n=sim[j,2]
+  m=sim[j,3]
+  h=sim[j,4]
+  
+  
+  #print(paste(b, e, f, g, h,((g>0) | (b>0) | (f<0.11)) ))
+  
+
+  
+  y =100*n+(100* (m-n))/(1+exp(g*(log(dat.pred$x)-log(h))))
+  
+  dat.pred=cbind(dat.pred,y)
+}
+
+
+colnames(dat.pred)=c("x", seq(1, ncol(dat.pred)-1,1))
+
+dat.pred=data.frame(dat.pred[1],stack(dat.pred[2:ncol(dat.pred)]))
+  
+  
+  
+  
+  
+  
+  x=seq(0,95,1)
+  
+  pred=data.frame(x)
+  
+  for (j in levels(factor(subdat4$Accession))) {
+    
+    y=(subdat4$c[subdat4$Accession==j]*100)+(100*(subdat4$d[subdat4$Accession==j]-subdat4$c[subdat4$Accession==j]))/(1+exp(subdat4$b[subdat4$Accession==j]*(log(x)-log(subdat4$e[subdat4$Accession==j]))))
+    
+    pred=cbind(pred,y)
+    
+  }
+
+  colnames(pred)=c("x",levels(factor(subdat4$Accession)))
+  pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+  colnames(pred)=c("x","y","Accession")
+  
+  
+  predL= (100*mod1$coefficients[2])+(100*(mod1$coefficients[3]-mod1$coefficients[2]))/(1+exp(mod1$coefficients[1]*(log(x)-log(mod1$coefficients[4]))))
+  
+  
+    print(ggplot()+
+          geom_line(aes(x=-dat.pred$x+10, y=dat.pred$values, group=dat.pred$ind ), alpha=0.1, size=0.2)+
+        geom_line(aes(x=-pred$x+10,y=pred$y, col=pred$Accession), lty=2, size=0.7)+
+        geom_line(aes(x=-x+10, y=predL), size=0.6)+
+        geom_point(aes(x=subdat$RealT, y=100*subdat$Rt, fill=subdat$Accession), shape=21, position = position_dodge(width=2), size=2.5)+
+          scale_y_continuous(limits=c(-10,110), breaks=c(0,25,50,75,100))+
+          ylab("Electrolyte Leakage (% Nitrogen Leakage)") + xlab("Temperature (°C)") +
+          labs(col="Accession",fill="Accession")+
+          ggtitle(i)+
+          theme_bw(base_size = 14)+
+          theme(legend.position = c(0.8,0.8),
+                legend.text.align= 1,
+                legend.text = element_text(size=12),
+                panel.grid.minor = element_blank(),
+                legend.background = element_rect(fill="transparent"),
+                legend.key = element_rect( fill = NA),
+                panel.border = element_rect(size=1),
+                axis.text=element_text(color="black"))
+    
+    )
+  
+  
+  
+}
+
+
+
+
+```
+
+
+
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+######################                                                         ######################
+######################                                                         ######################
+###################### Extra Code Below    Extra Code Below   Extra Code Below ######################
+######################                                                         ######################
+######################                                                         ######################
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+##### Looking at cold hardiness estimates based on EL #####
+
+summary(dat)
+
+levels(dat$Date)
+
+
+dat1=subset(dat, Date %in% "2/3/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.1*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+
+
+summary(dat1)
+
+
+dat2=subset(dat1, Temperature %in% c(4))
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_boiling
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+dat3=subset(dat1, Temperature %in% c(4))
+
+dat3$Cond_freeze=dat3$Cond_N
+dat3$RealT=-200
+
+
+
+dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_boiling
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(1-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$Rt)
+abline(0.58,0)
+
+mean(dat1$Rt[dat1$RealT==-200])
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=dat1$Rt[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=0))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+library(drc)
+
+mod1=drm((dat1$L/100)~dat1$posRT,dat1$Accession, fct=LL.5(fixed=c(NA,0,NA,NA,NA)), upperl =c(0,0.8,40,5) , type="continuous" )
+
+summary(mod1)
+
+
+library(sandwich)
+
+ED(mod1,50, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,0.50, interval="delta", type="absolute", level=0.95)
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=F)
+
+
+
+
+
+library(multcomp)
+
+
+Species.EDres <- ED(mod1,50, interval="delta", type="relative", level=0.95, pool=T,
+                     multcomp = TRUE, display = FALSE)
+confint(glht(Species.EDres[["EDmultcomp"]]))
+
+summary(glht(Species.EDres[["EDmultcomp"]], alternative="two.sided"))
+
+confint(mod1)
+```
+
+```{r}
+
+
+dat1=subset(dat, Date %in% "2/10/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+# dat3=dat1
+# 
+# dat3$Cond_freeze=dat3$Cond_N
+# dat3$RealT=-200
+# dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_boiling
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+
+
+
+library(car)
+Anova(lm1)
+
+
+plot(dat1$Rt,lm1$fitted.values, col=as.factor(dat1$RealT))
+abline(0,1)
+
+
+library(MASS)
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(3,0)
+plot(dat2$Ro,stud.res)
+hist(stud.res,breaks=50)
+library(car)
+qqPlot(stud.res)
+
+
+cooks.dist=cooks.distance(lm1)
+
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 4)
+
+
+
+#dat1=dat1[not_outlier,]
+
+
+
+
+
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_boiling
+
+
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(1-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$Rt)
+
+hist(dat1$Rt[dat1$RealT==4], breaks=20)
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=dat1$L[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=48.9))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  scale_y_continuous(limits=c(-10,100))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+
+mod1=drm((dat1$L/100)~dat1$posRT,dat1$Species, fct=LL.4(fixed=c(NA,0,NA,NA)), upperl =c(0,0.8,40) , type="continuous" )
+
+summary(mod1)
+
+
+
+library(sandwich)
+
+ED(mod1,80, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,0.50, interval="delta", type="absolute", level=0.95)
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+
+
+dat4=NULL
+
+for (i in levels(factor(dat1$Accession))) {
+  
+  subdat=subset(dat1, Accession %in% i)
+  mod2=drm((subdat$L/100)~subdat$posRT, fct=LL.4(fixed=c(NA,0,NA,NA)), upperl =c(0,0.8,40) , type="continuous" )
+  
+  print(summary(mod2))
+  
+  b=mod2$coefficients[1]
+  d=mod2$coefficients[2]
+  e=mod2$coefficients[3]
+  
+  dat4=rbind(dat4,c(i,b,d,e))
+  
+  
+}
+
+dat4=data.frame(dat4)
+colnames(dat4)=c("Accession","b","d","e")
+
+dat4$b=as.numeric(as.character(dat4$b))
+dat4$d=as.numeric(as.character(dat4$d))
+dat4$e=as.numeric(as.character(dat4$e))
+
+
+
+
+
+
+for (i in levels(dat1$Species)) {
+  
+  subdat=subset(dat1, Species %in% i)
+  
+  subdat4=subset(dat4, Accession %in% levels(factor(subdat$Accession)))
+  
+  mod1=drm((subdat$L/100)~subdat$posRT, fct=LL.4(fixed=c(NA,0,NA,NA)), start=c(-3,0.4,35), upperl =c(0,0.6,40) , type="continuous" )
+  
+  
+  
+  (vc <- vcov(mod1))
+
+coef(summary(mod1))[, "Std. Error"]
+
+sqrt(diag(vc))
+
+require("MASS")
+set.seed(10)
+nsim <- 5000
+sim <- mvrnorm(nsim, mu = coef(mod1),  Sigma = vc)
+head(sim)
+
+take <- data.frame(sample(nrow(sim), 100)) ## take 25 simulations at random
+
+colnames(take)="take"
+
+dat.pred=NULL
+dat.pred$x=seq(0,95,1)
+dat.pred=data.frame(dat.pred)
+
+
+for (j in take$take){
+  
+
+  g=sim[j,1]
+  m=sim[j,2]
+  h=sim[j,3]
+  
+  
+  #print(paste(b, e, f, g, h,((g>0) | (b>0) | (f<0.11)) ))
+  
+
+  
+  y =(100*m)/(1+exp(g*(log(dat.pred$x)-log(h))))
+  
+  dat.pred=cbind(dat.pred,y)
+}
+
+
+colnames(dat.pred)=c("x", seq(1, ncol(dat.pred)-1,1))
+
+dat.pred=data.frame(dat.pred[1],stack(dat.pred[2:ncol(dat.pred)]))
+  
+  
+  
+  
+  
+  
+  x=seq(0,95,1)
+  
+  pred=data.frame(x)
+  
+  for (j in levels(factor(subdat4$Accession))) {
+    
+    y=(100*subdat4$d[subdat4$Accession==j])/(1+exp(subdat4$b[subdat4$Accession==j]*(log(x)-log(subdat4$e[subdat4$Accession==j]))))
+    
+    pred=cbind(pred,y)
+    
+  }
+
+  colnames(pred)=c("x",levels(factor(subdat4$Accession)))
+  pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+  colnames(pred)=c("x","y","Accession")
+  
+  
+  predL= (100*mod1$coefficients[2])/(1+exp(mod1$coefficients[1]*(log(x)-log(mod1$coefficients[3]))))
+  
+  
+    print(ggplot()+
+          geom_line(aes(x=-dat.pred$x+10, y=dat.pred$values, group=dat.pred$ind ), alpha=0.1, size=0.2)+
+        geom_line(aes(x=-pred$x+10,y=pred$y, col=pred$Accession), lty=2, size=0.7)+
+        geom_line(aes(x=-x+10, y=predL), size=0.6)+
+        geom_point(aes(x=subdat$RealT, y=subdat$L, fill=subdat$Accession), shape=21, position = position_dodge(width=2), size=2.5)+
+          scale_y_continuous(limits=c(-10,110), breaks=c(0,25,50,75,100))+
+          ylab("Electrolyte Leakage (% Nitrogen Leakage)") + xlab("Temperature (°C)") +
+          labs(col="Accession",fill="Accession")+
+          ggtitle(i)+
+          theme_bw(base_size = 14)+
+          theme(legend.position = c(0.8,0.8),
+                legend.text.align= 0,
+                legend.text = element_text(size=12),
+                panel.grid.minor = element_blank(),
+                legend.background = element_rect(fill="transparent"),
+                legend.key = element_rect( fill = NA),
+                panel.border = element_rect(size=1),
+                axis.text=element_text(color="black"))
+    
+    )
+  
+  
+  
+}
+
+
+
+
+```
+
+
+```{r}
+
+
+dat1=subset(dat, Date %in% "2/10/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+# dat3=dat1
+# 
+# dat3$Cond_freeze=dat3$Cond_N
+# dat3$RealT=-200
+# dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_N
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+
+
+
+library(car)
+Anova(lm1)
+
+
+plot(dat1$Rt,lm1$fitted.values, col=as.factor(dat1$RealT))
+abline(0,1)
+
+
+library(MASS)
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(3,0)
+plot(dat2$Ro,stud.res)
+hist(stud.res,breaks=50)
+library(car)
+qqPlot(stud.res)
+
+
+cooks.dist=cooks.distance(lm1)
+
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 3)
+
+
+#dat1=dat1[not_outlier,]
+
+
+
+
+
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_N
+
+
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+
+
+
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(1-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$Rt)
+
+hist(dat1$Rt[dat1$RealT==4], breaks=20)
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=dat1$L[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=48.9))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  scale_y_continuous(limits=c(-10,100))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+
+mod1=drm((dat1$L/100)~dat1$posRT,dat1$Species, fct=LL.4(fixed=c(NA,0,NA,NA)), upperl =c(0,0.8,40) , type="continuous" )
+
+summary(mod1)
+
+
+
+library(sandwich)
+
+ED(mod1,80, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,0.50, interval="delta", type="absolute", level=0.95)
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+
+
+dat4=NULL
+
+for (i in levels(factor(dat1$Accession))) {
+  
+  subdat=subset(dat1, Accession %in% i)
+  mod2=drm((subdat$L/100)~subdat$posRT, fct=LL.4(fixed=c(NA,0,NA,NA)), upperl =c(0,0.8,40) , type="continuous" )
+  
+  print(summary(mod2))
+  
+  b=mod2$coefficients[1]
+  d=mod2$coefficients[2]
+  e=mod2$coefficients[3]
+  
+  dat4=rbind(dat4,c(i,b,d,e))
+  
+  
+}
+
+dat4=data.frame(dat4)
+colnames(dat4)=c("Accession","b","d","e")
+
+dat4$b=as.numeric(as.character(dat4$b))
+dat4$d=as.numeric(as.character(dat4$d))
+dat4$e=as.numeric(as.character(dat4$e))
+
+
+
+
+
+
+for (i in levels(dat1$Species)) {
+  
+  subdat=subset(dat1, Species %in% i)
+  
+  subdat4=subset(dat4, Accession %in% levels(factor(subdat$Accession)))
+  
+  mod1=drm((subdat$L/100)~subdat$posRT, fct=LL.4(fixed=c(NA,0,NA,NA)), start=c(-3,0.57,30), upperl =c(0,0.8,40) , type="continuous" )
+  
+  
+  
+  (vc <- vcov(mod1))
+
+coef(summary(mod1))[, "Std. Error"]
+
+sqrt(diag(vc))
+
+require("MASS")
+set.seed(10)
+nsim <- 5000
+sim <- mvrnorm(nsim, mu = coef(mod1),  Sigma = vc)
+head(sim)
+
+take <- data.frame(sample(nrow(sim), 100)) ## take 25 simulations at random
+
+colnames(take)="take"
+
+dat.pred=NULL
+dat.pred$x=seq(0,95,1)
+dat.pred=data.frame(dat.pred)
+
+
+for (j in take$take){
+  
+
+  g=sim[j,1]
+  m=sim[j,2]
+  h=sim[j,3]
+  
+  
+  #print(paste(b, e, f, g, h,((g>0) | (b>0) | (f<0.11)) ))
+  
+
+  
+  y =(100*m)/(1+exp(g*(log(dat.pred$x)-log(h))))
+  
+  dat.pred=cbind(dat.pred,y)
+}
+
+
+colnames(dat.pred)=c("x", seq(1, ncol(dat.pred)-1,1))
+
+dat.pred=data.frame(dat.pred[1],stack(dat.pred[2:ncol(dat.pred)]))
+  
+  
+  
+  
+  
+  
+  x=seq(0,95,1)
+  
+  pred=data.frame(x)
+  
+  for (j in levels(factor(subdat4$Accession))) {
+    
+    y=(100*subdat4$d[subdat4$Accession==j])/(1+exp(subdat4$b[subdat4$Accession==j]*(log(x)-log(subdat4$e[subdat4$Accession==j]))))
+    
+    pred=cbind(pred,y)
+    
+  }
+
+  colnames(pred)=c("x",levels(factor(subdat4$Accession)))
+  pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+  colnames(pred)=c("x","y","Accession")
+  
+  
+  predL= (100*mod1$coefficients[2])/(1+exp(mod1$coefficients[1]*(log(x)-log(mod1$coefficients[3]))))
+  
+  
+  print(ggplot()+
+          geom_line(aes(x=-dat.pred$x+10, y=dat.pred$values, group=dat.pred$ind ), alpha=0.1, size=0.2)+
+        geom_line(aes(x=-pred$x+10,y=pred$y, col=pred$Accession), lty=2, size=0.7)+
+        geom_line(aes(x=-x+10, y=predL), size=0.6)+
+        geom_point(aes(x=subdat$RealT, y=subdat$L, fill=subdat$Accession), shape=21, position = position_dodge(width=2), size=2.5)+
+          scale_y_continuous(limits=c(-10,110), breaks=c(0,25,50,75,100))+
+          ylab("Electrolyte Leakage (% Nitrogen Leakage)") + xlab("Temperature (°C)") +
+          labs(col="Accession",fill="Accession")+
+          ggtitle(i)+
+          theme_bw(base_size = 14)+
+          theme(legend.position = c(0.8,0.8),
+                legend.text.align= 0,
+                legend.text = element_text(size=12),
+                panel.grid.minor = element_blank(),
+                legend.background = element_rect(fill="transparent"),
+                legend.key = element_rect( fill = NA),
+                panel.border = element_rect(size=1),
+                axis.text=element_text(color="black"))
+    
+    )
+  
+  
+  
+}
+
+
+
+
+```
+
+
+
+```{r}
+
+
+dat1=subset(dat, Date %in% "3/13/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+# dat3=dat1
+# 
+# dat3$Cond_freeze=dat3$Cond_N
+# dat3$RealT=-200
+# dat1=rbind(dat1,dat3)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_boiling
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+
+
+
+library(car)
+Anova(lm1)
+
+
+plot(dat1$Rt,lm1$fitted.values, col=as.factor(dat1$RealT))
+abline(0,1)
+
+
+library(MASS)
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(3,0)
+plot(dat2$Ro,stud.res)
+hist(stud.res,breaks=50)
+library(car)
+qqPlot(stud.res)
+
+
+cooks.dist=cooks.distance(lm1)
+
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 4)
+
+
+
+dat1=dat1[not_outlier,]
+
+
+
+
+
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_boiling
+
+
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+summary(dat1)
+
+
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(1-dat1$Ro)
+
+
+plot(dat1$RealT,dat1$Rt)
+
+hist(dat1$Rt[dat1$RealT==4], breaks=20)
+
+ggplot()+
+  geom_point(aes(x=dat1$RealT[dat1$wrong==0],y=dat1$L[dat1$wrong==0], col=dat1$Species[dat1$wrong==0]),stat="summary", size=2, stroke=2)+
+  #geom_point(aes(x=-200,y=dat$L1, group=dat$Species, color=dat$Species), stat="summary", shape=21, size=2, stroke=2)+
+  geom_point(aes(x=-200,y=48.9))+
+  xlab("Temperature (°C)") + ylab("Leakage (% of boiling leakage)") + labs(color = "Species") +
+  scale_x_continuous(limits=c(-205,7), breaks=c(-200,-82,-72,-52,-42,-30,-20,-10, 4))+
+  scale_y_continuous(limits=c(-10,100))+
+  theme_bw(base_size=12) +
+  theme(legend.direction = 'vertical', 
+        legend.position = "right",
+        legend.key.size = unit(2, 'lines'),
+        panel.grid.minor = element_blank(),
+        legend.text.align= 0,
+        legend.background = element_rect(fill="transparent"),
+        legend.key = element_rect( fill = NA))
+
+
+
+
+
+
+dat1$posRT=-dat1$RealT
+
+summary(dat1)
+
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+
+mod1=drm((dat1$L/100)~dat1$posRT,dat1$Species, fct=LL.4(fixed=c(NA,0,NA,NA)), upperl =c(0,0.8,40) , type="continuous" )
+
+summary(mod1)
+
+
+
+library(sandwich)
+
+ED(mod1,50, interval="delta", type="relative", level=0.95)-10
+
+ED(mod1,0.50, interval="delta", type="absolute", level=0.95)
+
+EDcomp(mod1,c(50,50), type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+
+
+dat4=NULL
+
+for (i in levels(factor(dat1$Accession))) {
+  
+  subdat=subset(dat1, Accession %in% i)
+  mod2=drm((subdat$L/100)~subdat$posRT, fct=LL.4(fixed=c(NA,0,NA,NA)), upperl =c(0,0.8,40) , type="continuous" )
+  
+  print(summary(mod2))
+  
+  b=mod2$coefficients[1]
+  d=mod2$coefficients[2]
+  e=mod2$coefficients[3]
+  
+  dat4=rbind(dat4,c(i,b,d,e))
+  
+  
+}
+
+dat4=data.frame(dat4)
+colnames(dat4)=c("Accession","b","d","e")
+
+dat4$b=as.numeric(as.character(dat4$b))
+dat4$d=as.numeric(as.character(dat4$d))
+dat4$e=as.numeric(as.character(dat4$e))
+
+
+
+
+
+
+for (i in levels(dat1$Species)) {
+  
+  subdat=subset(dat1, Species %in% i)
+  
+  subdat4=subset(dat4, Accession %in% levels(factor(subdat$Accession)))
+  
+  mod1=drm((subdat$L/100)~subdat$posRT, fct=LL.4(fixed=c(NA,0,NA,NA)), start=c(-7.3,0.6,30), upperl =c(0,0.6,40) , type="continuous" )
+  
+  
+  
+  (vc <- vcov(mod1))
+
+coef(summary(mod1))[, "Std. Error"]
+
+sqrt(diag(vc))
+
+require("MASS")
+set.seed(10)
+nsim <- 5000
+sim <- mvrnorm(nsim, mu = coef(mod1),  Sigma = vc)
+head(sim)
+
+take <- data.frame(sample(nrow(sim), 100)) ## take 25 simulations at random
+
+colnames(take)="take"
+
+dat.pred=NULL
+dat.pred$x=seq(0,95,1)
+dat.pred=data.frame(dat.pred)
+
+
+for (j in take$take){
+  
+
+  g=sim[j,1]
+  m=sim[j,2]
+  h=sim[j,3]
+  
+  
+  #print(paste(b, e, f, g, h,((g>0) | (b>0) | (f<0.11)) ))
+  
+
+  
+  y =(100*m)/(1+exp(g*(log(dat.pred$x)-log(h))))
+  
+  dat.pred=cbind(dat.pred,y)
+}
+
+
+colnames(dat.pred)=c("x", seq(1, ncol(dat.pred)-1,1))
+
+dat.pred=data.frame(dat.pred[1],stack(dat.pred[2:ncol(dat.pred)]))
+  
+  
+  
+  
+  
+  
+  x=seq(0,95,1)
+  
+  pred=data.frame(x)
+  
+  for (j in levels(factor(subdat4$Accession))) {
+    
+    y=(100*subdat4$d[subdat4$Accession==j])/(1+exp(subdat4$b[subdat4$Accession==j]*(log(x)-log(subdat4$e[subdat4$Accession==j]))))
+    
+    pred=cbind(pred,y)
+    
+  }
+
+  colnames(pred)=c("x",levels(factor(subdat4$Accession)))
+  pred=data.frame(pred[1],stack(pred[2:ncol(pred)]))
+  colnames(pred)=c("x","y","Accession")
+  
+  
+  predL= (100*mod1$coefficients[2])/(1+exp(mod1$coefficients[1]*(log(x)-log(mod1$coefficients[3]))))
+  
+  
+    print(ggplot()+
+          geom_line(aes(x=-dat.pred$x+10, y=dat.pred$values, group=dat.pred$ind ), alpha=0.1, size=0.2)+
+        geom_line(aes(x=-pred$x+10,y=pred$y, col=pred$Accession), lty=2, size=0.7)+
+        geom_line(aes(x=-x+10, y=predL), size=0.6)+
+        geom_point(aes(x=subdat$RealT, y=subdat$L, fill=subdat$Accession), shape=21, position = position_dodge(width=2), size=2.5)+
+          scale_y_continuous(limits=c(-10,110), breaks=c(0,25,50,75,100))+
+          ylab("Electrolyte Leakage (% Nitrogen Leakage)") + xlab("Temperature (°C)") +
+          labs(col="Accession",fill="Accession")+
+          ggtitle(i)+
+          theme_bw(base_size = 14)+
+          theme(legend.position = c(0.8,0.8),
+                legend.text.align= 0,
+                legend.text = element_text(size=12),
+                panel.grid.minor = element_blank(),
+                legend.background = element_rect(fill="transparent"),
+                legend.key = element_rect( fill = NA),
+                panel.border = element_rect(size=1),
+                axis.text=element_text(color="black"))
+    
+    )
+  
+  
+  
+}
+
+
+
+
+```
