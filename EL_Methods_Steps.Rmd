@@ -1384,6 +1384,13 @@ grid.draw(g)
 
 ##### Quantifying the comparison between Damage and Relative Leakage #####
 
+dat=read.csv("MapleStemDamage200324.csv")
+cl.dat=read.csv("SpeciesGenos.csv")
+dat$posT=-dat$Temperature+10
+
+
+mod1=drm(dat$Damage~dat$posT, dat$Genotype,fct=LL.2(), type="continuous"   )
+summary(mod1)
 
 
 dat6=read.csv("ResultsbyAccession-L_boiling.csv")
@@ -1642,4 +1649,308 @@ summary(lm1)
 
 ```
 
+
+```{r}
+dat=read.csv("MapleStemDamage200324.csv")
+cl.dat=read.csv("SpeciesGenos.csv")
+dat$posT=-dat$Temperature+10
+
+
+mod1=drm(dat$Damage~dat$posT, dat$Genotype,fct=LL.2(), type="continuous"   )
+summary(mod1)
+
+
+dat2=data.frame(-ED(mod1,10, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("ten","Genotype")
+dat2$Genotype=as.factor(gsub(':10','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat2,cl.dat)
+
+
+dat2=data.frame(-ED(mod1,20, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("twenty","Genotype")
+dat2$Genotype=as.factor(gsub(':20','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+dat2=data.frame(-ED(mod1,30, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("thirty","Genotype")
+dat2$Genotype=as.factor(gsub(':30','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+
+dat2=data.frame(-ED(mod1,40, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("forty","Genotype")
+dat2$Genotype=as.factor(gsub(':40','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,50, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("fifty","Genotype")
+dat2$Genotype=as.factor(gsub(':50','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,60, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("sixty","Genotype")
+dat2$Genotype=as.factor(gsub(':60','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,70, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("seventy","Genotype")
+dat2$Genotype=as.factor(gsub(':70','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,80, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("eighty","Genotype")
+dat2$Genotype=as.factor(gsub(':80','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,90, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("ninety","Genotype")
+dat2$Genotype=as.factor(gsub(':90','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+
+
+
+
+
+
+
+dat=read.csv("ELMethodOut3.csv")
+tdat=read.csv("ELTemp.csv")
+tdat=aggregate(ActualT~Collection+Temperature,tdat,mean)
+colnames(tdat)=c("Date","Temperature","RealT")
+dat=merge(dat,tdat, by=c("Date","Temperature"))
+
+
+
+dat1=subset(dat, Date %in% "3/13/20")
+summary(dat1)
+
+dat1$wrong=0
+dat1$wrong[dat1$Cond_freeze>1.3*dat1$Cond_N]=1
+
+dat1=subset(dat1, wrong %in% 0)
+summary(dat1)
+
+
+dat1$Cond_boiling[is.na(dat1$Cond_boiling)]=dat1$Cond_N[is.na(dat1$Cond_boiling)]/0.5758
+
+
+dat1$Rt=dat1$Cond_freeze/dat1$Cond_boiling
+dat1=dat1[complete.cases(dat1),]
+
+
+lm1=lm(dat1$Rt~dat1$Accession+as.factor(dat1$RealT))
+Anova(lm1)
+
+
+stud.res=studres(lm1)
+plot(lm1$fitted.values,stud.res)
+abline(0,0)
+abline(3,0)
+plot(dat2$Ro,stud.res)
+hist(stud.res,breaks=50)
+qqPlot(stud.res)
+cooks.dist=cooks.distance(lm1)
+plot(cooks.dist)
+
+
+
+not_outlier = which(abs(stud.res) <= 4)
+dat1=dat1[not_outlier,]
+
+
+
+#### Step to normalize 4C as 0 ####
+
+dat2=subset(dat1, RealT %in% 4)
+dat2$Ro=dat2$Cond_freeze/dat2$Cond_boiling
+dat2=aggregate(Ro~Accession,dat2,mean)
+dat1=merge(dat1,dat2, by="Accession")
+
+
+#### Step to take maximum average leakage ####
+
+dat2=dat1
+dat2=aggregate(Rt~Accession+RealT,dat2,mean)
+dat2=aggregate(Rt~Accession,dat2,max)
+colnames(dat2)=c("Accession","Rmax")
+dat1=merge(dat1,dat2,by="Accession")
+
+#### Normalizing from 0 to 100 ####
+
+dat1$L=100*(dat1$Rt-dat1$Ro)/(dat1$Rmax-dat1$Ro)
+
+
+
+#### Create positive-only temperatures ####
+
+dat1$posRT=-dat1$RealT
+dat1$posRT=dat1$posRT+10
+
+
+
+library(drc)
+mod1=drm((dat1$L/100)~dat1$posRT,dat1$Accession, fct=LL.2() , type="continuous" )
+summary(mod1)
+
+
+
+
+dat2=data.frame(-ED(mod1,10, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("tenEL","Genotype")
+dat2$Genotype=as.factor(gsub(':10','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+
+dat2=data.frame(-ED(mod1,20, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("twentyEL","Genotype")
+dat2$Genotype=as.factor(gsub(':20','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+dat2=data.frame(-ED(mod1,30, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("thirtyEL","Genotype")
+dat2$Genotype=as.factor(gsub(':30','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+
+dat2=data.frame(-ED(mod1,40, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("fortyEL","Genotype")
+dat2$Genotype=as.factor(gsub(':40','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,50, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("fiftyEL","Genotype")
+dat2$Genotype=as.factor(gsub(':50','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,60, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("sixtyEL","Genotype")
+dat2$Genotype=as.factor(gsub(':60','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,70, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("seventyEL","Genotype")
+dat2$Genotype=as.factor(gsub(':70','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,80, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("eightyEL","Genotype")
+dat2$Genotype=as.factor(gsub(':80','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+dat2=data.frame(-ED(mod1,90, interval="delta", type="relative", level=0.95)[,1])+10
+
+dat2$Genotypes=rownames(dat2)
+colnames(dat2)=c("ninetyEL","Genotype")
+dat2$Genotype=as.factor(gsub(':90','',gsub('e:','',dat2$Genotype)))
+
+dat3=merge(dat3,dat2)
+
+
+
+res=cor(dat3[20:12],dat3[c(2,4:11)])
+
+
+rownames(res)=c("90_EL","80_EL","70_EL","60_EL","50_EL","40_EL","30_EL","20_EL","10_EL")
+colnames(res)=c("10_Visual","20_Visual","30_Visual","40_Visual","50_Visual","60_Visual","70_Visual","80_Visual","90_Visual")
+
+
+library(corrplot)
+corrplot(res, method="color",cl.lim=c(0,0.7), is.corr=F,
+         tl.col = "black", tl.srt = 45)
+
+
+dat4=dat3[c(2,4:11)]
+dat5=dat3[20:12]
+
+
+mat.test=matrix(data=NA, nrow=9, ncol=9)
+
+for (i in 1:9) {
+  
+  for (j in 1:9) {
+    
+    rmse=sum((dat4[i]-dat5[j])^2)/nrow(dat4)
+    mat.test[i,j]=rmse
+    
+  }
+  
+}
+
+rownames(mat.test)=c("90_EL","80_EL","70_EL","60_EL","50_EL","40_EL","30_EL","20_EL","10_EL")
+colnames(mat.test)=c("10_Visual","20_Visual","30_Visual","40_Visual","50_Visual","60_Visual","70_Visual","80_Visual","90_Visual")
+
+
+mat.testb=log(mat.test,2)
+corrplot(mat.testb, method="color",cl.lim=c(4,12), is.corr=F,
+         tl.col = "black", tl.srt = 45)
+
+
+mat.test2=matrix(data=NA, nrow=9, ncol=9)
+
+
+for (i in 1:9) {
+  
+  for (j in 1:9) {
+    
+    bias=sum((dat4[i]-dat5[j]))/nrow(dat4)
+    mat.test2[i,j]=bias
+    
+  }
+  
+}
+
+
+rownames(mat.test2)=c("90_EL","80_EL","70_EL","60_EL","50_EL","40_EL","30_EL","20_EL","10_EL")
+colnames(mat.test2)=c("10_Visual","20_Visual","30_Visual","40_Visual","50_Visual","60_Visual","70_Visual","80_Visual","90_Visual")
+
+
+corrplot(mat.test2, method="color",cl.lim=c(-35,35), is.corr=F,
+         tl.col = "black", tl.srt = 45)
+
+
+
+
+```
 
