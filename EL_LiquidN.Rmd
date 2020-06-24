@@ -524,6 +524,33 @@ plot_grid(dem,Bo,Nit, ncol=1, align='horizontal')
 
 dem+Bo+Nit + plot_layout(ncol=1)
 
+
+
+biasN=sum(pred$y-pred$yN)/length(pred$y)
+biasBoil=sum(pred$y-pred$yBoil)/length(pred$y)
+
+RMSEN=sqrt(sum((pred$y-pred$yN)^2)/length(pred$y))
+RMSEBoil=sqrt(sum((pred$y-pred$yBoil)^2)/length(pred$y))
+
+biasN
+biasBoil
+RMSEN
+RMSEBoil
+
+
+
+biasN=sum(pred$y[pred$y>25&pred$y<75]-pred$yN[pred$y>25&pred$y<75])/length(pred$yN[pred$y>25&pred$y<75])
+biasBoil=sum(pred$y[pred$y>25&pred$y<75]-pred$yBoil[pred$y>25&pred$y<75])/length(pred$yBoil[pred$y>25&pred$y<75])
+RMSEN=sqrt(sum((pred$y[pred$y>25&pred$y<75]-pred$yN[pred$y>25&pred$y<75])^2)/length(pred$y[pred$y>25&pred$y<75]))
+RMSEBoil=sqrt(sum((pred$y[pred$y>25&pred$y<75]-pred$yBoil[pred$y>25&pred$y<75])^2)/length(pred$y[pred$y>25&pred$y<75]))
+
+biasN
+biasBoil
+RMSEN
+RMSEBoil
+
+
+
 ###############################################################################
 #################                                             #################
 #################           STANDARDIZED ON NITROGEN          #################
