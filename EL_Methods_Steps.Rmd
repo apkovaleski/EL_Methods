@@ -22,6 +22,7 @@ library(agricolae)
 library(corrplot)
 library(grid)
 library(soilphysics)
+library(lme4)
 
 dat=read.csv("ELMethod.csv")
 dat=read.csv("ELMethodOut3.csv")
@@ -2033,5 +2034,13 @@ library(lme4)
 lm5=lmer(LTE~fiftyEL+(1|Species), data=dta)
 summary(lm5)
 Anova(lm5)
+
+
+lm5=lmer(LTE~fifty+(1|Species), data=dta)
+summary(lm5)
+Anova(lm5)
+
+cor(dta$LTE,dta$fifty)
+
 ```
 
