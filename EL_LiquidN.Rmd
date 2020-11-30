@@ -25,6 +25,8 @@ library(patchwork)
 
 
 dat=read.csv("ELMethod.csv")
+dat$Species=as.factor(dat$Species)
+dat$Accession=as.factor(dat$Accession)
 tdat=read.csv("ELTemp.csv")
 tdat=aggregate(ActualT~Collection+Temperature,tdat,mean)
 colnames(tdat)=c("Date","Temperature","RealT")
@@ -240,6 +242,8 @@ b #Parameter that shows relationship between Cond_N and Cond_boiling
 
 
 dat=read.csv("ELMethodOut3.csv")
+dat$Species=as.factor(dat$Species)
+dat$Accession=as.factor(dat$Accession)
 tdat=read.csv("ELTemp.csv")
 tdat=aggregate(ActualT~Collection+Temperature,tdat,mean)
 colnames(tdat)=c("Date","Temperature","RealT")
@@ -353,7 +357,8 @@ colnames(dat13b)=c("Accession","Species","bBoil","cBoil","dBoil","eBoil")
 
 
 dat13=merge(dat13,dat13b)
-
+dat13$Species=as.factor(dat13$Species)
+dat13$Accession=as.factor(dat13$Accession)
 
 
 
@@ -520,7 +525,7 @@ Nit=ggplot()+
 plot_grid(Bo,Nit, ncol=2,align='vertical')
 
 
-plot_grid(dem,Bo,Nit, ncol=1, align='horizontal')
+plot_grid(dem,Bo,Nit, ncol=1, align='horizontal') #Currently doesnt work because of the dem graph, need to change dataset name
 
 dem+Bo+Nit + plot_layout(ncol=1)
 
@@ -674,7 +679,8 @@ colnames(dat13b)=c("Accession","Species","bBoil","dBoil","eBoil")
 
 
 dat13=merge(dat13,dat13b)
-
+dat13$Accession=as.factor(dat13$Accession)
+dat13$Species=as.factor(dat13$Species)
 
 
 

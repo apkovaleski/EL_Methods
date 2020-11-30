@@ -30,6 +30,9 @@ tdat=read.csv("ELTemp.csv")
 tdat=aggregate(ActualT~Collection+Temperature,tdat,mean)
 colnames(tdat)=c("Date","Temperature","RealT")
 dat=merge(dat,tdat, by=c("Date","Temperature"))
+dat$Species=as.factor(dat$Species)
+dat$Accession=as.factor(dat$Accession)
+dat$Color=as.factor(dat$Color)
 
 
 dat1=dat[,c(1,6,8,9,10)]
@@ -1055,8 +1058,13 @@ HSD.test(lm1,"Species",console=T,alpha=0.05)
 
 
 dat=read.csv("MapleStemDamage200324.csv")
+dat$Species=as.factor(dat$Species)
+dat$Genotype=as.factor(dat$Genotype)
+
 
 cl.dat=read.csv("SpeciesGenos.csv")
+cl.dat$Species=as.factor(cl.dat$Species)
+cl.dat$Genotype=as.factor(cl.dat$Genotype)
 
 dat$posT=-dat$Temperature+10
 
@@ -1126,7 +1134,7 @@ HSD.test(lm1,"Species",console=T,alpha=0.05)
 
 #### This analyzes all data together, at species level and makes comparison ####
 mod2=drm(dat$Damage~dat$posT, dat$Species,fct=LL.2(), type="continuous"   )
-EDcomp(mod2,c(50,50),type="relative", vcov.=sandwich, multcomp=T, plotit=T)
+EDcomp(mod2,c(50,50),type="relative",  multcomp=T, plotit=T)
 ED(mod2,50, interval="delta", type="relative", level=0.95)-10
 
 
@@ -1173,8 +1181,8 @@ dat9=merge(dat9,dat8)
 dat9=merge(dat9,dat3a, all=T)
 dat9=merge(dat9,dat5a)
 dat9=merge(dat9,dat6g)
-
-
+dat9$Genotype=as.factor(dat9$Genotype)
+dat9$Species=as.factor(dat9$Species)
 
 res=cor(dat9[c(3:11,16,17,18,19)],dat9[c(13,12,14,15)])
 
@@ -1495,7 +1503,8 @@ dat3=merge(dat3,dat2)
 
 
 dat9b=merge(dat6,dat3)
-
+dat9b$Species=as.factor(dat9b$Species)
+dat9b$Genotype=as.factor(dat9b$Genotype)
 
 
 res=cor(dat9b[3:5],dat9b[6:14])
@@ -1677,7 +1686,12 @@ summary(lm1)
 
 ```{r}
 dat=read.csv("MapleStemDamage200324.csv")
+dat$Species=as.factor(dat$Species)
+dat$Genotype=as.factor(dat$Genotype)
 cl.dat=read.csv("SpeciesGenos.csv")
+cl.dat$Species=as.factor(cl.dat$Species)
+cl.dat$Genotype=as.factor(cl.dat$Genotype)
+
 dat$posT=-dat$Temperature+10
 
 
@@ -1762,6 +1776,8 @@ dat3=merge(dat3,dat2)
 
 
 dat=read.csv("ELMethodOut3.csv")
+dat$Species=as.factor(dat$Species)
+
 tdat=read.csv("ELTemp.csv")
 tdat=aggregate(ActualT~Collection+Temperature,tdat,mean)
 colnames(tdat)=c("Date","Temperature","RealT")
@@ -1794,7 +1810,7 @@ stud.res=studres(lm1)
 plot(lm1$fitted.values,stud.res)
 abline(0,0)
 abline(3,0)
-plot(dat2$Ro,stud.res)
+plot(dat1$Rt,stud.res)
 hist(stud.res,breaks=50)
 qqPlot(stud.res)
 cooks.dist=cooks.distance(lm1)
